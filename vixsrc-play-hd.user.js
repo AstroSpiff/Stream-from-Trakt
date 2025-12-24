@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         VixSrc Play HD – Trakt Anchor Observer + Detail Pages
 // @namespace    http://tampermonkey.net/
-// @version      1.45
+// @version      1.46
 // @description  ▶ pallino rosso in basso-destra su film & episodi Trakt (liste SPA + pagine dettaglio)
 // @match        https://trakt.tv/*
 // @require      https://cdn.jsdelivr.net/npm/hls.js@1.5.15
@@ -759,21 +759,21 @@
     a.rel = 'noopener noreferrer';
     a.textContent = '▶';
 
-    // Dimensioni base in base al tipo (stesse dimensioni per entrambi)
-    const size = 28;
-    const fontSize = 14;
+    // Dimensioni più grandi per migliorare la cliccabilità su smartphone
+    const size = 40;
+    const fontSize = 18;
     const margin = 6;
 
     // Per bottoni piccoli usa position:fixed per evitare clipping da overflow:hidden
     if (isSmall && containerRect) {
-      // Calcola posizione: alto a destra della locandina
+      // Calcola posizione: alto a sinistra della locandina
       const fixedTop = containerRect.top + margin;
-      const fixedRight = window.innerWidth - containerRect.right + margin;
+      const fixedLeft = containerRect.left + margin;
 
       Object.assign(a.style, {
         position:      'fixed',
         top:           `${fixedTop}px`,
-        right:         `${fixedRight}px`,
+        left:          `${fixedLeft}px`,
         width:         `${size}px`,
         height:        `${size}px`,
         background:    '#e50914',
@@ -791,13 +791,13 @@
       });
       a.className = 'vix-circle-btn vix-circle-btn-small vix-circle-btn-fixed';
       a.dataset.containerTop = containerRect.top;
-      a.dataset.containerRight = containerRect.right;
+      a.dataset.containerLeft = containerRect.left;
     } else {
-      // Bottoni grandi: posizionamento normale assoluto
+      // Bottoni grandi: posizionamento normale assoluto in alto a sinistra
       Object.assign(a.style, {
         position:      'absolute',
-        bottom:        `${margin}px`,
-        right:         `${margin}px`,
+        top:           `${margin}px`,
+        left:          `${margin}px`,
         width:         `${size}px`,
         height:        `${size}px`,
         background:    '#e50914',
@@ -869,7 +869,7 @@
       const btn = createCircleBtn(url, true, rect);
       btn.dataset.vixContainer = containerID;
       document.body.appendChild(btn);
-      console.log(`[VixSrc] Bottone piccolo (28px) position:fixed inserito per container ID ${containerID} (${rect.width}x${rect.height})`);
+      console.log(`[VixSrc] Bottone piccolo (40px) position:fixed inserito per container ID ${containerID} (${rect.width}x${rect.height})`);
 
       // Aggiorna posizione su scroll/resize
       const updatePosition = () => {
@@ -880,9 +880,9 @@
         }
         const newRect = container.getBoundingClientRect();
         const fixedTop = newRect.top + 6;
-        const fixedRight = window.innerWidth - newRect.right + 6;
+        const fixedLeft = newRect.left + 6;
         btn.style.top = `${fixedTop}px`;
-        btn.style.right = `${fixedRight}px`;
+        btn.style.left = `${fixedLeft}px`;
       };
 
       window.addEventListener('scroll', updatePosition, { passive: true });
@@ -905,7 +905,7 @@
         container.style.position = 'relative';
       }
       container.appendChild(createCircleBtn(url, false));
-      console.log(`[VixSrc] Bottone normale (28px) inserito in container (${rect.width}x${rect.height})`);
+      console.log(`[VixSrc] Bottone normale (40px) inserito in container (${rect.width}x${rect.height})`);
     }
   }
 
