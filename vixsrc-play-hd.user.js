@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         VixSrc Play HD – Trakt Anchor Observer + Detail Pages
 // @namespace    http://tampermonkey.net/
-// @version      1.47
+// @version      1.48
 // @description  ▶ pallino rosso in basso-destra su film & episodi Trakt (liste SPA + pagine dettaglio)
 // @match        https://trakt.tv/*
 // @require      https://cdn.jsdelivr.net/npm/hls.js@1.5.15
@@ -16,20 +16,31 @@
 ;(function(){
   'use strict';
 
-  // ◆ Aggiungi stili CSS per il bottone play (40px fissi, top-left, tutte le dimensioni)
+  // ◆ Aggiungi stili CSS per il bottone play
   const style = document.createElement('style');
   style.textContent = `
-    /* Dimensioni fisse 40px per tutti i dispositivi, posizionato in alto a sinistra */
+    /* Dimensioni responsive del bottone, posizionato in alto a sinistra */
     .vix-circle-btn {
-      width: 40px !important;
-      height: 40px !important;
-      font-size: 18px !important;
+      width: 28px !important;
+      height: 28px !important;
+      font-size: 14px !important;
       top: 6px !important;
       left: 6px !important;
       display: flex !important;
       z-index: 99999 !important;
       visibility: visible !important;
       opacity: 1 !important;
+      pointer-events: auto !important;
+      touch-action: manipulation !important;
+    }
+
+    /* Desktop: leggermente più grande */
+    @media (min-width: 768px) {
+      .vix-circle-btn {
+        width: 32px !important;
+        height: 32px !important;
+        font-size: 16px !important;
+      }
     }
 
     /* Hover effect */
@@ -737,9 +748,9 @@
     a.rel = 'noopener noreferrer';
     a.textContent = '▶';
 
-    // Dimensioni più grandi per migliorare la cliccabilità su smartphone
-    const size = 40;
-    const fontSize = 18;
+    // Dimensioni responsive del bottone
+    const size = 28;
+    const fontSize = 14;
     const margin = 6;
 
     // Per bottoni piccoli usa position:fixed per evitare clipping da overflow:hidden
@@ -794,17 +805,39 @@
       a.className = 'vix-circle-btn';
     }
 
-    ['pointerdown', 'touchstart'].forEach(evt => {
+    // Gestione eventi migliorata per evitare conflitti con link sottostanti
+    // Blocca TUTTI gli eventi che potrebbero interferire
+    ['mousedown', 'pointerdown', 'touchstart'].forEach(evt => {
       a.addEventListener(evt, (ev) => {
         ev.preventDefault();
+        ev.stopPropagation();
         ev.stopImmediatePropagation();
       }, { capture: true, passive: false });
     });
+
+    // Gestisci il click con massima priorità
     a.addEventListener('click', (ev) => {
       ev.preventDefault();
+      ev.stopPropagation();
       ev.stopImmediatePropagation();
+
+      // Evita doppi click
+      if (a.dataset.vixLoading === '1') {
+        console.log('[VixSrc] Click ignorato: già in caricamento');
+        return;
+      }
+
+      console.log('[VixSrc] Click bottone rilevato!');
       openDirectOrFallback(url, a);
-    }, true);
+    }, { capture: true, passive: false });
+
+    // Blocca anche touchend per prevenire click fantasma su mobile
+    a.addEventListener('touchend', (ev) => {
+      ev.preventDefault();
+      ev.stopPropagation();
+      ev.stopImmediatePropagation();
+    }, { capture: true, passive: false });
+
     return a;
   }
 
@@ -847,7 +880,7 @@
       const btn = createCircleBtn(url, true, rect);
       btn.dataset.vixContainer = containerID;
       document.body.appendChild(btn);
-      console.log(`[VixSrc] Bottone piccolo (40px) position:fixed inserito per container ID ${containerID} (${rect.width}x${rect.height})`);
+      console.log(`[VixSrc] Bottone piccolo (28px) position:fixed inserito per container ID ${containerID} (${rect.width}x${rect.height})`);
 
       // Aggiorna posizione su scroll/resize
       const updatePosition = () => {
@@ -883,7 +916,7 @@
         container.style.position = 'relative';
       }
       container.appendChild(createCircleBtn(url, false));
-      console.log(`[VixSrc] Bottone normale (40px) inserito in container (${rect.width}x${rect.height})`);
+      console.log(`[VixSrc] Bottone normale (28px) inserito in container (${rect.width}x${rect.height})`);
     }
   }
 
