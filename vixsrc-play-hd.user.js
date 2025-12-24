@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         VixSrc Play HD – Trakt Anchor Observer + Detail Pages
 // @namespace    http://tampermonkey.net/
-// @version      1.35
+// @version      1.36
 // @description  ▶ pallino rosso in basso-destra su film & episodi Trakt (liste SPA + pagine dettaglio)  
 // @match        https://trakt.tv/*  
 // @require      https://cdn.jsdelivr.net/npm/hls.js@1.5.15
@@ -19,7 +19,27 @@
   // ◆ Aggiungi stili CSS responsive per il bottone play
   const style = document.createElement('style');
   style.textContent = `
-    /* Desktop: bottone più grande */
+    /* Mobile: bottone piccolo */
+    .vix-circle-btn {
+      width: 24px !important;
+      height: 24px !important;
+      font-size: 12px !important;
+      bottom: 4px !important;
+      right: 4px !important;
+    }
+
+    /* Tablet: bottone medio */
+    @media (min-width: 480px) {
+      .vix-circle-btn {
+        width: 28px !important;
+        height: 28px !important;
+        font-size: 14px !important;
+        bottom: 6px !important;
+        right: 6px !important;
+      }
+    }
+
+    /* Desktop: bottone grande */
     @media (min-width: 768px) {
       .vix-circle-btn {
         width: 36px !important;
@@ -29,6 +49,7 @@
         right: 10px !important;
       }
     }
+
     /* Hover effect */
     .vix-circle-btn:hover {
       transform: scale(1.1);
@@ -772,28 +793,27 @@
 
   // ◆ Inietta il pulsante se non già presente
   function injectCircle(container, url) {
-    if (!container || container.querySelector('.vix-circle-btn')) return;
+    if (!container) return;
+
+    // Se già esiste un bottone (nel container o nel wrapper), skip
+    if (container.querySelector('.vix-circle-btn') ||
+        container.parentElement?.classList.contains('vix-btn-wrapper')) {
+      return;
+    }
 
     // Verifica dimensioni del container
     const rect = container.getBoundingClientRect();
 
-    // Se troppo piccolo, ritenta dopo un delay (potrebbe non essere ancora renderizzato)
-    if (rect.width < 40 || rect.height < 40) {
+    console.log(`[VixSrc] injectCircle: container size ${rect.width}x${rect.height}`);
+
+    // Se troppo piccolo o non visibile, ritenta dopo un delay
+    if (rect.width < 20 || rect.height < 20) {
       setTimeout(() => {
-        const newRect = container.getBoundingClientRect();
-        if (newRect.width >= 40 && newRect.height >= 40 && !container.querySelector('.vix-circle-btn')) {
+        if (!container.querySelector('.vix-circle-btn') &&
+            !container.parentElement?.classList.contains('vix-btn-wrapper')) {
           injectCircle(container, url); // Riprova ricorsivamente
-        } else if ((newRect.width > 0 && newRect.width < 100) || (newRect.height > 0 && newRect.height < 100)) {
-          // Container piccolo ma visibile: posiziona il bottone a fianco
-          injectCircleAside(container, url);
         }
       }, 500);
-      return;
-    }
-
-    // Se il container è piccolo (< 100px), posiziona il bottone a fianco
-    if (rect.width < 100 || rect.height < 100) {
-      injectCircleAside(container, url);
       return;
     }
 
@@ -802,35 +822,9 @@
       container.style.position = 'relative';
     }
     container.appendChild(createCircleBtn(url));
+    console.log(`[VixSrc] Bottone inserito dentro container (${rect.width}x${rect.height})`);
   }
 
-  // ◆ Inietta il bottone a fianco del container (per locandine piccole)
-  function injectCircleAside(container, url) {
-    if (!container) return;
-
-    // Crea un wrapper che contenga sia il container che il bottone
-    const parent = container.parentElement;
-    if (!parent) return;
-
-    // Non creare wrapper duplicati
-    if (parent.classList.contains('vix-btn-wrapper')) return;
-
-    const wrapper = document.createElement('div');
-    wrapper.className = 'vix-btn-wrapper';
-    wrapper.style.cssText = 'display: flex; align-items: flex-start; gap: 4px; position: relative;';
-
-    // Sostituisci il container con il wrapper
-    parent.insertBefore(wrapper, container);
-    wrapper.appendChild(container);
-
-    // Crea il bottone e posizionalo a destra
-    const btn = createCircleBtn(url);
-    btn.style.position = 'relative';
-    btn.style.flexShrink = '0';
-    btn.style.bottom = '0';
-    btn.style.right = '0';
-    wrapper.appendChild(btn);
-  }
 
   // ◆ Cache delle liste TMDB e verifica presenza
   const tmdbCache = { movie: null, tv: null };
@@ -867,6 +861,7 @@
     if (a.closest('.btn') || a.closest('[class*="nav"]') ||
         a.closest('[class*="arrow"]') || a.closest('[class*="button"]') ||
         a.textContent.trim().match(/^(prev|next|←|→|‹|›|«|»)$/i)) {
+      console.log(`[VixSrc] Skipping navigation link: ${href}`);
       return;
     }
 
@@ -881,7 +876,12 @@
                    || (a.querySelector('img') ? a : null);  // solo se contiene un'immagine
 
     // Se non c'è un container valido, skip
-    if (!container) return;
+    if (!container) {
+      console.log(`[VixSrc] No container found for: ${href}`);
+      return;
+    }
+
+    console.log(`[VixSrc] Processing anchor: ${href}, container:`, container.className || container.tagName);
 
     // Estrai la path
     const path = href.split('?')[0];
