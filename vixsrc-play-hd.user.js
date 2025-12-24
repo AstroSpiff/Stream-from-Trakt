@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         VixSrc Play HD – Trakt Anchor Observer + Detail Pages
 // @namespace    http://tampermonkey.net/
-// @version      1.31
+// @version      1.32
 // @description  ▶ pallino rosso in basso-destra su film & episodi Trakt (liste SPA + pagine dettaglio)  
 // @match        https://trakt.tv/*  
 // @require      https://cdn.jsdelivr.net/npm/hls.js@1.5.15
@@ -15,6 +15,27 @@
 
 ;(function(){
   'use strict';
+
+  // ◆ Aggiungi stili CSS responsive per il bottone play
+  const style = document.createElement('style');
+  style.textContent = `
+    /* Desktop: bottone più grande */
+    @media (min-width: 768px) {
+      .vix-circle-btn {
+        width: 36px !important;
+        height: 36px !important;
+        font-size: 18px !important;
+        bottom: 10px !important;
+        right: 10px !important;
+      }
+    }
+    /* Hover effect */
+    .vix-circle-btn:hover {
+      transform: scale(1.1);
+      box-shadow: 0 0 12px rgba(229, 9, 20, 0.6);
+    }
+  `;
+  document.head.appendChild(style);
 
   const GM_XHR = typeof GM_xmlhttpRequest === 'function'
     ? GM_xmlhttpRequest
@@ -705,7 +726,7 @@
     }
   }
 
-  // ◆ Crea il pallino rosso ▶ (responsive con CSS)
+  // ◆ Crea il pallino rosso ▶ (responsive)
   function createCircleBtn(url) {
     const a = document.createElement('a');
     a.href = 'javascript:void(0)';
@@ -713,19 +734,17 @@
     a.rel = 'noopener noreferrer';
     a.textContent = '▶';
 
-    // Usa min() CSS per scalare automaticamente: min(36px, 15% del container)
-    // Questo funziona nativamente con qualsiasi dimensione del container
+    // Bottone più piccolo di default (28px) per essere sempre visibile
+    // Su desktop (>768px) torna a 36px
     Object.assign(a.style, {
       position:      'absolute',
-      bottom:        'min(10px, 3%)',
-      right:         'min(10px, 3%)',
-      width:         'min(36px, 15vw, 15%)',
-      height:        'min(36px, 15vw, 15%)',
-      minWidth:      '24px',
-      minHeight:     '24px',
+      bottom:        '6px',
+      right:         '6px',
+      width:         '28px',
+      height:        '28px',
       background:    '#e50914',
       color:         '#fff',
-      fontSize:      'min(18px, 7.5vw, 7.5%)',
+      fontSize:      '14px',
       display:       'flex',
       alignItems:    'center',
       justifyContent:'center',
@@ -733,7 +752,8 @@
       textDecoration:'none',
       zIndex:        '9999',
       cursor:        'pointer',
-      pointerEvents: 'auto'
+      pointerEvents: 'auto',
+      transition:    'all 0.2s ease'
     });
     a.className = 'vix-circle-btn';
     ['pointerdown', 'touchstart'].forEach(evt => {
