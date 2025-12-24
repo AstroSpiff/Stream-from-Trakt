@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         VixSrc Play HD – Trakt Anchor Observer + Detail Pages
 // @namespace    http://tampermonkey.net/
-// @version      1.18
+// @version      1.19
 // @description  ▶ pallino rosso in basso-destra su film & episodi Trakt (liste SPA + pagine dettaglio)  
 // @match        https://trakt.tv/*  
 // @require      https://cdn.jsdelivr.net/npm/hls.js@1.5.15
@@ -194,7 +194,20 @@
     return class GmHlsLoader {
       constructor(config) {
         this.config = config;
-        this.stats = {};
+        this.stats = {
+          aborted: false,
+          loaded: 0,
+          retry: 0,
+          total: 0,
+          trequest: 0,
+          tfirst: 0,
+          tload: 0,
+          bwEstimate: 0,
+          chunkCount: 0,
+          loading: { start: 0, first: 0, end: 0 },
+          parsing: { start: 0, end: 0 },
+          buffering: { start: 0, first: 0, end: 0 }
+        };
         this.context = null;
         this.callbacks = null;
         this.request = null;
@@ -204,12 +217,21 @@
         this.context = context;
         this.callbacks = callbacks;
         const now = (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now();
-        this.stats = { trequest: now, tfirst: 0, tload: 0, loaded: 0, total: 0 };
+        this.stats.trequest = now;
+        this.stats.tfirst = 0;
+        this.stats.tload = 0;
+        this.stats.loaded = 0;
+        this.stats.total = 0;
+        this.stats.loading.start = now;
+        this.stats.loading.first = 0;
+        this.stats.loading.end = 0;
         const isBinary = context.responseType === 'arraybuffer' || context.type === 'fragment' || context.type === 'key';
         const responseType = context.responseType || (isBinary ? 'arraybuffer' : 'text');
         const headers = Object.assign({}, baseHeaders, config.headers || {}, context.headers || {});
         if (typeof context.rangeStart === 'number' && typeof context.rangeEnd === 'number') {
           headers.Range = `bytes=${context.rangeStart}-${context.rangeEnd - 1}`;
+        } else if (typeof context.rangeStart === 'number' && typeof context.rangeLength === 'number') {
+          headers.Range = `bytes=${context.rangeStart}-${context.rangeStart + context.rangeLength - 1}`;
         }
         this.request = GM_XHR({
           method: 'GET',
@@ -224,16 +246,21 @@
             }
             const tload = (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now();
             this.stats.tload = tload;
-            if (!this.stats.tfirst) this.stats.tfirst = tload;
+            if (!this.stats.tfirst) {
+              this.stats.tfirst = tload;
+              this.stats.loading.first = tload;
+            }
             const data = isBinary ? res.response : (res.responseText || res.response || '');
             const size = isBinary && data ? data.byteLength : (data ? data.length : 0);
             this.stats.loaded = size;
             this.stats.total = size;
+            this.stats.loading.end = tload;
             callbacks.onSuccess({ url: context.url, data }, this.stats, context, res);
           },
           onprogress: (res) => {
             if (!this.stats.tfirst) {
               this.stats.tfirst = (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now();
+              this.stats.loading.first = this.stats.tfirst;
             }
             if (res.lengthComputable) {
               this.stats.loaded = res.loaded;
