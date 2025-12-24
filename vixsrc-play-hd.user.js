@@ -32,12 +32,6 @@
       opacity: 1 !important;
     }
 
-    .vix-circle-btn.vix-circle-btn-small {
-      right: auto !important;
-      left: 50% !important;
-      transform: translateX(-50%);
-    }
-
     /* Tablet: bottone medio */
     @media (min-width: 480px) {
       .vix-circle-btn {
@@ -64,10 +58,6 @@
     .vix-circle-btn:hover {
       transform: scale(1.1);
       box-shadow: 0 0 12px rgba(229, 9, 20, 0.6);
-    }
-
-    .vix-circle-btn.vix-circle-btn-small:hover {
-      transform: translateX(-50%) scale(1.1);
     }
   `;
   document.head.appendChild(style);
@@ -762,7 +752,7 @@
   }
 
   // ◆ Crea il pallino rosso ▶ (responsive)
-  function createCircleBtn(url, isSmall = false) {
+  function createCircleBtn(url, isSmall = false, containerRect = null) {
     const a = document.createElement('a');
     a.href = 'javascript:void(0)';
     a.removeAttribute('target');
@@ -774,13 +764,16 @@
     const fontSize = isSmall ? 8 : 14;
     const margin = isSmall ? 3 : 6;
 
-    // Bottoni piccoli: posizionamento assoluto bottom-center dentro la locandina
-    if (isSmall) {
+    // Per bottoni piccoli usa position:fixed per evitare clipping da overflow:hidden
+    if (isSmall && containerRect) {
+      // Calcola posizione: alto al centro della locandina
+      const fixedTop = containerRect.top + margin;
+      const fixedLeft = containerRect.left + (containerRect.width / 2) - (size / 2);
+
       Object.assign(a.style, {
-        position:      'absolute',
-        bottom:        `${margin}px`,
-        left:          '50%',
-        transform:     'translateX(-50%)',
+        position:      'fixed',
+        top:           `${fixedTop}px`,
+        left:          `${fixedLeft}px`,
         width:         `${size}px`,
         height:        `${size}px`,
         background:    '#e50914',
@@ -794,9 +787,12 @@
         zIndex:        '99999',
         cursor:        'pointer',
         pointerEvents: 'auto',
-        transition:    'all 0.2s ease'
+        transition:    'none'
       });
-      a.className = 'vix-circle-btn vix-circle-btn-small';
+      a.className = 'vix-circle-btn vix-circle-btn-small vix-circle-btn-fixed';
+      a.dataset.containerTop = containerRect.top;
+      a.dataset.containerLeft = containerRect.left;
+      a.dataset.containerWidth = containerRect.width;
     } else {
       // Bottoni grandi: posizionamento normale assoluto
       Object.assign(a.style, {
@@ -839,12 +835,17 @@
   function injectCircle(container, url) {
     if (!container) return;
 
+    // Controlla sia nel container che nel body per bottoni fixed
     const hasButtonInContainer = container.querySelector('.vix-circle-btn');
+    const containerID = container.dataset.vixButtonId || `vix-${Date.now()}-${Math.random().toString(36).substring(2, 11)}`;
+    const hasFixedButton = document.querySelector(`.vix-circle-btn-fixed[data-vix-container="${containerID}"]`);
 
-    if (hasButtonInContainer || container.dataset.vixButton === 'added') {
+    if (hasButtonInContainer || hasFixedButton || container.dataset.vixButton === 'added') {
       return;
     }
 
+    // Marca il container con un ID univoco
+    container.dataset.vixButtonId = containerID;
     container.dataset.vixButton = 'added';
 
     // Verifica dimensioni del container
@@ -865,13 +866,39 @@
     const isSmall = rect.width < 80 || rect.height < 80;
 
     if (isSmall) {
-      // Bottone piccolo: bottom-center dentro la locandina
-      const computedPos = getComputedStyle(container).position;
-      if (computedPos !== 'absolute' && computedPos !== 'fixed') {
-        container.style.position = 'relative';
-      }
-      container.appendChild(createCircleBtn(url, true));
-      console.log(`[VixSrc] Bottone piccolo (bottom-center) inserito in container (${rect.width}x${rect.height})`);
+      // Bottone piccolo: usa position:fixed aggiunto a body
+      const btn = createCircleBtn(url, true, rect);
+      btn.dataset.vixContainer = containerID;
+      document.body.appendChild(btn);
+      console.log(`[VixSrc] Bottone piccolo (15px) position:fixed inserito per container ID ${containerID} (${rect.width}x${rect.height})`);
+
+      // Aggiorna posizione su scroll/resize
+      const updatePosition = () => {
+        // Verifica che il container esista ancora
+        if (!document.body.contains(container)) {
+          btn.remove();
+          return;
+        }
+        const newRect = container.getBoundingClientRect();
+        const fixedBottom = window.innerHeight - newRect.bottom + 3;
+        const fixedRight = window.innerWidth - newRect.right + 3;
+        btn.style.bottom = `${fixedBottom}px`;
+        btn.style.right = `${fixedRight}px`;
+      };
+
+      window.addEventListener('scroll', updatePosition, { passive: true });
+      window.addEventListener('resize', updatePosition, { passive: true });
+
+      // Rimuovi listener quando il bottone o container vengono rimossi
+      const observer = new MutationObserver(() => {
+        if (!document.body.contains(btn) || !document.body.contains(container)) {
+          window.removeEventListener('scroll', updatePosition);
+          window.removeEventListener('resize', updatePosition);
+          observer.disconnect();
+          if (document.body.contains(btn)) btn.remove();
+        }
+      });
+      observer.observe(document.body, { childList: true, subtree: true });
     } else {
       // Bottone grande: posizionamento normale (dentro il container)
       const computedPos = getComputedStyle(container).position;
