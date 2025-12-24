@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         VixSrc Play HD – Trakt Anchor Observer + Detail Pages
 // @namespace    http://tampermonkey.net/
-// @version      1.20
+// @version      1.21
 // @description  ▶ pallino rosso in basso-destra su film & episodi Trakt (liste SPA + pagine dettaglio)  
 // @match        https://trakt.tv/*  
 // @require      https://cdn.jsdelivr.net/npm/hls.js@1.5.15
@@ -222,9 +222,12 @@
         const isBinary = context.responseType === 'arraybuffer' || context.type === 'fragment' || context.type === 'key';
         const responseType = context.responseType || (isBinary ? 'arraybuffer' : 'text');
         const headers = Object.assign({}, baseHeaders, config.headers || {}, context.headers || {});
-        if (typeof context.rangeStart === 'number' && typeof context.rangeEnd === 'number') {
+        const hasRangeStart = typeof context.rangeStart === 'number' && isFinite(context.rangeStart);
+        const hasRangeEnd = typeof context.rangeEnd === 'number' && isFinite(context.rangeEnd);
+        const hasRangeLength = typeof context.rangeLength === 'number' && isFinite(context.rangeLength);
+        if (isBinary && hasRangeStart && hasRangeEnd && context.rangeEnd > context.rangeStart) {
           headers.Range = `bytes=${context.rangeStart}-${context.rangeEnd - 1}`;
-        } else if (typeof context.rangeStart === 'number' && typeof context.rangeLength === 'number') {
+        } else if (isBinary && hasRangeStart && hasRangeLength && context.rangeLength > 0) {
           headers.Range = `bytes=${context.rangeStart}-${context.rangeStart + context.rangeLength - 1}`;
         }
         this.request = GM_XHR({
