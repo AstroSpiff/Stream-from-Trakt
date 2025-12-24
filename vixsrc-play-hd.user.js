@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         VixSrc Play HD – Trakt Anchor Observer + Detail Pages
 // @namespace    http://tampermonkey.net/
-// @version      1.16
+// @version      1.17
 // @description  ▶ pallino rosso in basso-destra su film & episodi Trakt (liste SPA + pagine dettaglio)  
 // @match        https://trakt.tv/*  
 // @require      https://cdn.jsdelivr.net/npm/hls.js@1.5.15
@@ -10,6 +10,7 @@
 // @connect      vixsrc.to
 // @connect      vixcloud.co
 // @connect      vixcloud.to
+// @connect      *
 // ==/UserScript==
 
 ;(function(){
@@ -420,6 +421,7 @@
     const prevText = btn.textContent;
     btn.dataset.vixLoading = '1';
     btn.textContent = '...';
+    closePlayer();
     try {
       const result = await resolveVixStream(url);
       if (result && result.streamUrl) {
@@ -438,8 +440,8 @@
   // ◆ Crea il pallino rosso ▶
   function createCircleBtn(url) {
     const a = document.createElement('a');
-    a.href = url + '?autoplay=true&theme=dark&lang=it&res=1080';
-    a.target = '_blank';
+    a.href = 'javascript:void(0)';
+    a.removeAttribute('target');
     a.rel = 'noopener noreferrer';
     a.textContent = '▶';
     Object.assign(a.style, {
@@ -460,11 +462,17 @@
       pointerEvents: 'auto'
     });
     a.className = 'vix-circle-btn';
+    ['pointerdown', 'touchstart'].forEach(evt => {
+      a.addEventListener(evt, (ev) => {
+        ev.preventDefault();
+        ev.stopImmediatePropagation();
+      }, { capture: true, passive: false });
+    });
     a.addEventListener('click', (ev) => {
       ev.preventDefault();
-      ev.stopPropagation();
+      ev.stopImmediatePropagation();
       openDirectOrFallback(url, a);
-    });
+    }, true);
     return a;
   }
 
