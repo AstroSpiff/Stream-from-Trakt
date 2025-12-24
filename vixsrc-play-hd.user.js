@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         VixSrc Play HD – Trakt Anchor Observer + Detail Pages
 // @namespace    http://tampermonkey.net/
-// @version      1.29
+// @version      1.30
 // @description  ▶ pallino rosso in basso-destra su film & episodi Trakt (liste SPA + pagine dettaglio)  
 // @match        https://trakt.tv/*  
 // @require      https://cdn.jsdelivr.net/npm/hls.js@1.5.15
@@ -705,23 +705,34 @@
     }
   }
 
-  // ◆ Crea il pallino rosso ▶
-  function createCircleBtn(url) {
+  // ◆ Crea il pallino rosso ▶ (responsive)
+  function createCircleBtn(url, container) {
     const a = document.createElement('a');
     a.href = 'javascript:void(0)';
     a.removeAttribute('target');
     a.rel = 'noopener noreferrer';
     a.textContent = '▶';
+
+    // Calcola dimensioni responsive in base al container
+    const containerWidth = container ? container.offsetWidth : 200;
+    const containerHeight = container ? container.offsetHeight : 300;
+    const minDimension = Math.min(containerWidth, containerHeight);
+
+    // Scala il bottone: minimo 24px, massimo 36px, o 15% della dimensione minore
+    const btnSize = Math.max(24, Math.min(36, Math.floor(minDimension * 0.15)));
+    const fontSize = Math.floor(btnSize * 0.5);
+    const margin = Math.max(4, Math.floor(btnSize * 0.28));
+
     Object.assign(a.style, {
       position:      'absolute',
-      bottom:        '10px',
-      right:         '10px',
-      width:         '36px',
-      height:        '36px',
+      bottom:        `${margin}px`,
+      right:         `${margin}px`,
+      width:         `${btnSize}px`,
+      height:        `${btnSize}px`,
       background:    '#e50914',
       color:         '#fff',
-      fontSize:      '18px',
-      lineHeight:    '36px',
+      fontSize:      `${fontSize}px`,
+      lineHeight:    `${btnSize}px`,
       textAlign:     'center',
       borderRadius:  '50%',
       textDecoration:'none',
@@ -750,7 +761,7 @@
     if (getComputedStyle(container).position === 'static') {
       container.style.position = 'relative';
     }
-    container.appendChild(createCircleBtn(url));
+    container.appendChild(createCircleBtn(url, container));
   }
 
   // ◆ Cache delle liste TMDB e verifica presenza
