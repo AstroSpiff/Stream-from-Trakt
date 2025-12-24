@@ -1,9 +1,9 @@
 // ==UserScript==
 // @name         VixSrc Play HD – Trakt Anchor Observer + Detail Pages
 // @namespace    http://tampermonkey.net/
-// @version      1.38
-// @description  ▶ pallino rosso in basso-destra su film & episodi Trakt (liste SPA + pagine dettaglio)  
-// @match        https://trakt.tv/*  
+// @version      1.39
+// @description  ▶ pallino rosso in basso-destra su film & episodi Trakt (liste SPA + pagine dettaglio)
+// @match        https://trakt.tv/*
 // @require      https://cdn.jsdelivr.net/npm/hls.js@1.5.15
 // @grant        GM_xmlhttpRequest
 // @grant        GM.xmlHttpRequest
@@ -748,7 +748,7 @@
   }
 
   // ◆ Crea il pallino rosso ▶ (responsive)
-  function createCircleBtn(url, isSmall = false) {
+  function createCircleBtn(url, isSmall = false, containerRect = null) {
     const a = document.createElement('a');
     a.href = 'javascript:void(0)';
     a.removeAttribute('target');
@@ -760,26 +760,57 @@
     const fontSize = isSmall ? 8 : 14;
     const margin = isSmall ? 3 : 6;
 
-    Object.assign(a.style, {
-      position:      'absolute',
-      bottom:        `${margin}px`,
-      right:         `${margin}px`,
-      width:         `${size}px`,
-      height:        `${size}px`,
-      background:    '#e50914',
-      color:         '#fff',
-      fontSize:      `${fontSize}px`,
-      display:       'flex',
-      alignItems:    'center',
-      justifyContent:'center',
-      borderRadius:  '50%',
-      textDecoration:'none',
-      zIndex:        '9999',
-      cursor:        'pointer',
-      pointerEvents: 'auto',
-      transition:    'all 0.2s ease'
-    });
-    a.className = isSmall ? 'vix-circle-btn vix-circle-btn-small' : 'vix-circle-btn';
+    // Per bottoni piccoli usa position:fixed per evitare clipping da overflow:hidden
+    if (isSmall && containerRect) {
+      const fixedBottom = window.innerHeight - containerRect.bottom + margin;
+      const fixedRight = window.innerWidth - containerRect.right + margin;
+
+      Object.assign(a.style, {
+        position:      'fixed',
+        bottom:        `${fixedBottom}px`,
+        right:         `${fixedRight}px`,
+        width:         `${size}px`,
+        height:        `${size}px`,
+        background:    '#e50914',
+        color:         '#fff',
+        fontSize:      `${fontSize}px`,
+        display:       'flex',
+        alignItems:    'center',
+        justifyContent:'center',
+        borderRadius:  '50%',
+        textDecoration:'none',
+        zIndex:        '99999',
+        cursor:        'pointer',
+        pointerEvents: 'auto',
+        transition:    'none'
+      });
+      a.className = 'vix-circle-btn vix-circle-btn-small vix-circle-btn-fixed';
+      a.dataset.containerBottom = containerRect.bottom;
+      a.dataset.containerRight = containerRect.right;
+    } else {
+      // Bottoni grandi: posizionamento normale assoluto
+      Object.assign(a.style, {
+        position:      'absolute',
+        bottom:        `${margin}px`,
+        right:         `${margin}px`,
+        width:         `${size}px`,
+        height:        `${size}px`,
+        background:    '#e50914',
+        color:         '#fff',
+        fontSize:      `${fontSize}px`,
+        display:       'flex',
+        alignItems:    'center',
+        justifyContent:'center',
+        borderRadius:  '50%',
+        textDecoration:'none',
+        zIndex:        '9999',
+        cursor:        'pointer',
+        pointerEvents: 'auto',
+        transition:    'all 0.2s ease'
+      });
+      a.className = 'vix-circle-btn';
+    }
+
     ['pointerdown', 'touchstart'].forEach(evt => {
       a.addEventListener(evt, (ev) => {
         ev.preventDefault();
@@ -823,17 +854,42 @@
     // Determina se la locandina è piccola
     const isSmall = rect.width < 80 || rect.height < 80;
 
-    // Posizionamento normale (dentro il container)
-    if (getComputedStyle(container).position === 'static') {
-      container.style.position = 'relative';
+    if (isSmall) {
+      // Bottone piccolo: usa position:fixed aggiunto a body
+      const btn = createCircleBtn(url, true, rect);
+      btn.dataset.vixContainer = container.dataset.vixButton;
+      document.body.appendChild(btn);
+      console.log(`[VixSrc] Bottone piccolo (15px) position:fixed inserito per container (${rect.width}x${rect.height})`);
+
+      // Aggiorna posizione su scroll/resize
+      const updatePosition = () => {
+        const newRect = container.getBoundingClientRect();
+        const fixedBottom = window.innerHeight - newRect.bottom + 3;
+        const fixedRight = window.innerWidth - newRect.right + 3;
+        btn.style.bottom = `${fixedBottom}px`;
+        btn.style.right = `${fixedRight}px`;
+      };
+
+      window.addEventListener('scroll', updatePosition, { passive: true });
+      window.addEventListener('resize', updatePosition, { passive: true });
+
+      // Rimuovi listener quando il bottone viene rimosso
+      const observer = new MutationObserver(() => {
+        if (!document.body.contains(btn)) {
+          window.removeEventListener('scroll', updatePosition);
+          window.removeEventListener('resize', updatePosition);
+          observer.disconnect();
+        }
+      });
+      observer.observe(document.body, { childList: true, subtree: true });
+    } else {
+      // Bottone grande: posizionamento normale (dentro il container)
+      if (getComputedStyle(container).position === 'static') {
+        container.style.position = 'relative';
+      }
+      container.appendChild(createCircleBtn(url, false));
+      console.log(`[VixSrc] Bottone normale (28px) inserito in container (${rect.width}x${rect.height})`);
     }
-    // Forza overflow visible per evitare che il bottone venga tagliato
-    const overflow = getComputedStyle(container).overflow;
-    if (overflow === 'hidden') {
-      container.style.overflow = 'visible';
-    }
-    container.appendChild(createCircleBtn(url, isSmall));
-    console.log(`[VixSrc] Bottone ${isSmall ? 'piccolo (15px)' : 'normale (28px)'} inserito in container (${rect.width}x${rect.height})`);
   }
 
 
