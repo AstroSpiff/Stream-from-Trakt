@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         VixSrc Play HD – Trakt Anchor Observer + Detail Pages
 // @namespace    http://tampermonkey.net/
-// @version      1.28
+// @version      1.29
 // @description  ▶ pallino rosso in basso-destra su film & episodi Trakt (liste SPA + pagine dettaglio)  
 // @match        https://trakt.tv/*  
 // @require      https://cdn.jsdelivr.net/npm/hls.js@1.5.15
@@ -581,17 +581,27 @@
 
           // Toggle menu al click del badge
           qualityBtn.addEventListener('click', (e) => {
+            e.preventDefault();
             e.stopPropagation();
             const isVisible = qualityMenu.style.display === 'block';
             qualityMenu.style.display = isVisible ? 'none' : 'block';
-          });
+            console.log(`[VixSrc] Menu qualità ${isVisible ? 'chiuso' : 'aperto'}`);
+          }, { capture: true });
 
           // Chiudi menu se clicchi fuori
-          document.addEventListener('click', (e) => {
+          const closeMenuOutside = (e) => {
             if (!qualityContainer.contains(e.target)) {
-              qualityMenu.style.display = 'none';
+              if (qualityMenu.style.display === 'block') {
+                qualityMenu.style.display = 'none';
+                console.log('[VixSrc] Menu qualità chiuso (click esterno)');
+              }
             }
-          });
+          };
+
+          // Usa setTimeout per evitare che il primo click venga catturato immediatamente
+          setTimeout(() => {
+            document.addEventListener('click', closeMenuOutside);
+          }, 100);
 
           // Posiziona il container relativo al video
           const videoContainer = video.parentElement;
