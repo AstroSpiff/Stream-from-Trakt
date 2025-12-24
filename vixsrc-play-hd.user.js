@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         VixSrc Play HD – Trakt Anchor Observer + Detail Pages
 // @namespace    http://tampermonkey.net/
-// @version      1.33
+// @version      1.34
 // @description  ▶ pallino rosso in basso-destra su film & episodi Trakt (liste SPA + pagine dettaglio)  
 // @match        https://trakt.tv/*  
 // @require      https://cdn.jsdelivr.net/npm/hls.js@1.5.15
@@ -827,6 +827,13 @@
     // solo link interni Trakt
     if (!href.startsWith('/movies/') && !href.startsWith('/shows/')) return;
 
+    // Escludi link di navigazione (frecce prev/next, bottoni, ecc.)
+    if (a.closest('.btn') || a.closest('[class*="nav"]') ||
+        a.closest('[class*="arrow"]') || a.closest('[class*="button"]') ||
+        a.textContent.trim().match(/^(prev|next|←|→|‹|›|«|»)$/i)) {
+      return;
+    }
+
     // container candidato - espanso per includere più casi (mobile, grid, ecc.)
     const container = a.closest('div.poster.with-overflow')
                    || a.closest('div.fanart')
@@ -835,10 +842,9 @@
                    || a.closest('div.grid-item')
                    || a.closest('div[class*="poster"]')
                    || a.closest('li[class*="season"]')
-                   || a.querySelector('img[class*="real"]')?.parentElement
-                   || a;  // fallback: usa il link stesso come container
+                   || (a.querySelector('img') ? a : null);  // solo se contiene un'immagine
 
-    // se già dentro una pagina dettaglio, skip
+    // Se non c'è un container valido, skip
     if (!container) return;
 
     // Estrai la path
