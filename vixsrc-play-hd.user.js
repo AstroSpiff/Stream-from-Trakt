@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         VixSrc Play HD – Trakt Anchor Observer + Detail Pages
 // @namespace    http://tampermonkey.net/
-// @version      1.44
+// @version      1.45
 // @description  ▶ pallino rosso in basso-destra su film & episodi Trakt (liste SPA + pagine dettaglio)
 // @match        https://trakt.tv/*
 // @require      https://cdn.jsdelivr.net/npm/hls.js@1.5.15
@@ -760,20 +760,20 @@
     a.textContent = '▶';
 
     // Dimensioni base in base al tipo
-    const size = isSmall ? 15 : 28;
-    const fontSize = isSmall ? 8 : 14;
-    const margin = isSmall ? 3 : 6;
+    const size = isSmall ? 24 : 28;
+    const fontSize = isSmall ? 12 : 14;
+    const margin = isSmall ? 4 : 6;
 
     // Per bottoni piccoli usa position:fixed per evitare clipping da overflow:hidden
     if (isSmall && containerRect) {
-      // Calcola posizione: alto al centro della locandina
-      const fixedTop = containerRect.top + margin;
-      const fixedLeft = containerRect.left + (containerRect.width / 2) - (size / 2);
+      // Calcola posizione: basso a destra della locandina
+      const fixedBottom = window.innerHeight - containerRect.bottom + margin;
+      const fixedRight = window.innerWidth - containerRect.right + margin;
 
       Object.assign(a.style, {
         position:      'fixed',
-        top:           `${fixedTop}px`,
-        left:          `${fixedLeft}px`,
+        bottom:        `${fixedBottom}px`,
+        right:         `${fixedRight}px`,
         width:         `${size}px`,
         height:        `${size}px`,
         background:    '#e50914',
@@ -790,9 +790,8 @@
         transition:    'none'
       });
       a.className = 'vix-circle-btn vix-circle-btn-small vix-circle-btn-fixed';
-      a.dataset.containerTop = containerRect.top;
-      a.dataset.containerLeft = containerRect.left;
-      a.dataset.containerWidth = containerRect.width;
+      a.dataset.containerBottom = containerRect.bottom;
+      a.dataset.containerRight = containerRect.right;
     } else {
       // Bottoni grandi: posizionamento normale assoluto
       Object.assign(a.style, {
@@ -870,7 +869,7 @@
       const btn = createCircleBtn(url, true, rect);
       btn.dataset.vixContainer = containerID;
       document.body.appendChild(btn);
-      console.log(`[VixSrc] Bottone piccolo (15px) position:fixed inserito per container ID ${containerID} (${rect.width}x${rect.height})`);
+      console.log(`[VixSrc] Bottone piccolo (24px) position:fixed inserito per container ID ${containerID} (${rect.width}x${rect.height})`);
 
       // Aggiorna posizione su scroll/resize
       const updatePosition = () => {
@@ -880,10 +879,10 @@
           return;
         }
         const newRect = container.getBoundingClientRect();
-        const fixedTop = newRect.top + 3;
-        const fixedLeft = newRect.left + (newRect.width / 2) - (15 / 2);
-        btn.style.top = `${fixedTop}px`;
-        btn.style.left = `${fixedLeft}px`;
+        const fixedBottom = window.innerHeight - newRect.bottom + 4;
+        const fixedRight = window.innerWidth - newRect.right + 4;
+        btn.style.bottom = `${fixedBottom}px`;
+        btn.style.right = `${fixedRight}px`;
       };
 
       window.addEventListener('scroll', updatePosition, { passive: true });
