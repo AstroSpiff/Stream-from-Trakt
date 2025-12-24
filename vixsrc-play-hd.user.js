@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         VixSrc Play HD – Trakt Anchor Observer + Detail Pages
 // @namespace    http://tampermonkey.net/
-// @version      1.19
+// @version      1.20
 // @description  ▶ pallino rosso in basso-destra su film & episodi Trakt (liste SPA + pagine dettaglio)  
 // @match        https://trakt.tv/*  
 // @require      https://cdn.jsdelivr.net/npm/hls.js@1.5.15
@@ -191,23 +191,24 @@
 
   function createGmHlsLoader(referer) {
     const baseHeaders = buildRequestHeaders(referer);
+    const initStats = (now) => ({
+      aborted: false,
+      loaded: 0,
+      retry: 0,
+      total: 0,
+      trequest: now,
+      tfirst: 0,
+      tload: 0,
+      bwEstimate: 0,
+      chunkCount: 0,
+      loading: { start: now, first: 0, end: 0 },
+      parsing: { start: 0, end: 0 },
+      buffering: { start: 0, first: 0, end: 0 }
+    });
     return class GmHlsLoader {
       constructor(config) {
         this.config = config;
-        this.stats = {
-          aborted: false,
-          loaded: 0,
-          retry: 0,
-          total: 0,
-          trequest: 0,
-          tfirst: 0,
-          tload: 0,
-          bwEstimate: 0,
-          chunkCount: 0,
-          loading: { start: 0, first: 0, end: 0 },
-          parsing: { start: 0, end: 0 },
-          buffering: { start: 0, first: 0, end: 0 }
-        };
+        this.stats = initStats(0);
         this.context = null;
         this.callbacks = null;
         this.request = null;
@@ -217,14 +218,7 @@
         this.context = context;
         this.callbacks = callbacks;
         const now = (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now();
-        this.stats.trequest = now;
-        this.stats.tfirst = 0;
-        this.stats.tload = 0;
-        this.stats.loaded = 0;
-        this.stats.total = 0;
-        this.stats.loading.start = now;
-        this.stats.loading.first = 0;
-        this.stats.loading.end = 0;
+        this.stats = initStats(now);
         const isBinary = context.responseType === 'arraybuffer' || context.type === 'fragment' || context.type === 'key';
         const responseType = context.responseType || (isBinary ? 'arraybuffer' : 'text');
         const headers = Object.assign({}, baseHeaders, config.headers || {}, context.headers || {});
