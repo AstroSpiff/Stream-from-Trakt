@@ -880,10 +880,10 @@
           return;
         }
         const newRect = container.getBoundingClientRect();
-        const fixedBottom = window.innerHeight - newRect.bottom + 3;
-        const fixedRight = window.innerWidth - newRect.right + 3;
-        btn.style.bottom = `${fixedBottom}px`;
-        btn.style.right = `${fixedRight}px`;
+        const fixedTop = newRect.top + 3;
+        const fixedLeft = newRect.left + (newRect.width / 2) - (15 / 2);
+        btn.style.top = `${fixedTop}px`;
+        btn.style.left = `${fixedLeft}px`;
       };
 
       window.addEventListener('scroll', updatePosition, { passive: true });
