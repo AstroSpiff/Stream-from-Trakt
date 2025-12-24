@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         VixSrc Play HD – Trakt Anchor Observer + Detail Pages
 // @namespace    http://tampermonkey.net/
-// @version      1.32
+// @version      1.33
 // @description  ▶ pallino rosso in basso-destra su film & episodi Trakt (liste SPA + pagine dettaglio)  
 // @match        https://trakt.tv/*  
 // @require      https://cdn.jsdelivr.net/npm/hls.js@1.5.15
@@ -773,6 +773,23 @@
   // ◆ Inietta il pulsante se non già presente
   function injectCircle(container, url) {
     if (!container || container.querySelector('.vix-circle-btn')) return;
+
+    // Verifica che il container sia visibile e abbia dimensioni minime
+    const rect = container.getBoundingClientRect();
+    if (rect.width < 40 || rect.height < 40) {
+      // Container troppo piccolo, ritenta dopo un delay (potrebbe non essere ancora renderizzato)
+      setTimeout(() => {
+        const newRect = container.getBoundingClientRect();
+        if (newRect.width >= 40 && newRect.height >= 40 && !container.querySelector('.vix-circle-btn')) {
+          if (getComputedStyle(container).position === 'static') {
+            container.style.position = 'relative';
+          }
+          container.appendChild(createCircleBtn(url));
+        }
+      }, 500);
+      return;
+    }
+
     if (getComputedStyle(container).position === 'static') {
       container.style.position = 'relative';
     }
@@ -810,10 +827,16 @@
     // solo link interni Trakt
     if (!href.startsWith('/movies/') && !href.startsWith('/shows/')) return;
 
-    // container candidato
+    // container candidato - espanso per includere più casi (mobile, grid, ecc.)
     const container = a.closest('div.poster.with-overflow')
                    || a.closest('div.fanart')
-                   || a.closest('div.poster');
+                   || a.closest('div.poster')
+                   || a.closest('li.grid-item')
+                   || a.closest('div.grid-item')
+                   || a.closest('div[class*="poster"]')
+                   || a.closest('li[class*="season"]')
+                   || a.querySelector('img[class*="real"]')?.parentElement
+                   || a;  // fallback: usa il link stesso come container
 
     // se già dentro una pagina dettaglio, skip
     if (!container) return;
