@@ -26,6 +26,8 @@
       font-size: 12px !important;
       bottom: 4px !important;
       right: 4px !important;
+      display: flex !important;
+      z-index: 99999 !important;
     }
 
     /* Tablet: bottone medio */
@@ -884,7 +886,8 @@
       observer.observe(document.body, { childList: true, subtree: true });
     } else {
       // Bottone grande: posizionamento normale (dentro il container)
-      if (getComputedStyle(container).position === 'static') {
+      const computedPos = getComputedStyle(container).position;
+      if (computedPos !== 'absolute' && computedPos !== 'fixed') {
         container.style.position = 'relative';
       }
       container.appendChild(createCircleBtn(url, false));
