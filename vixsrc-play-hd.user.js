@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         VixSrc Play HD – Trakt Anchor Observer + Detail Pages
 // @namespace    http://tampermonkey.net/
-// @version      1.23
+// @version      1.24
 // @description  ▶ pallino rosso in basso-destra su film & episodi Trakt (liste SPA + pagine dettaglio)  
 // @match        https://trakt.tv/*  
 // @require      https://cdn.jsdelivr.net/npm/hls.js@1.5.15
@@ -396,9 +396,21 @@
     Object.assign(statusEl.style, { fontSize: '13px', opacity: '0.75' });
 
     const qualityRow = document.createElement('div');
-    Object.assign(qualityRow.style, { display: 'flex', alignItems: 'center', gap: '8px', fontSize: '12px', opacity: '0.85' });
+    Object.assign(qualityRow.style, {
+      display: 'flex',
+      alignItems: 'center',
+      gap: '8px',
+      fontSize: '12px',
+      opacity: '0.85',
+      visibility: 'visible',
+      width: '100%',
+      padding: '4px 0'
+    });
     const qualityLabel = document.createElement('span');
-    qualityLabel.textContent = 'Qualita:';
+    qualityLabel.textContent = 'Qualità:';
+    Object.assign(qualityLabel.style, {
+      whiteSpace: 'nowrap'
+    });
     const qualitySelect = document.createElement('select');
     qualitySelect.disabled = true;
     Object.assign(qualitySelect.style, {
@@ -406,7 +418,10 @@
       color: '#fff',
       border: '1px solid #2a2a2a',
       borderRadius: '6px',
-      padding: '4px 6px'
+      padding: '4px 6px',
+      cursor: 'pointer',
+      minWidth: '100px',
+      fontSize: '12px'
     });
     qualitySelect.appendChild(new Option('Auto', 'auto'));
     qualityRow.appendChild(qualityLabel);
