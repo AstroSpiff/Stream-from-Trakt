@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         VixSrc Play HD – Trakt Anchor Observer + Detail Pages
 // @namespace    http://tampermonkey.net/
-// @version      1.43
+// @version      1.44
 // @description  ▶ pallino rosso in basso-destra su film & episodi Trakt (liste SPA + pagine dettaglio)
 // @match        https://trakt.tv/*
 // @require      https://cdn.jsdelivr.net/npm/hls.js@1.5.15
@@ -766,13 +766,14 @@
 
     // Per bottoni piccoli usa position:fixed per evitare clipping da overflow:hidden
     if (isSmall && containerRect) {
-      const fixedBottom = window.innerHeight - containerRect.bottom + margin;
-      const fixedRight = window.innerWidth - containerRect.right + margin;
+      // Calcola posizione: alto al centro della locandina
+      const fixedTop = containerRect.top + margin;
+      const fixedLeft = containerRect.left + (containerRect.width / 2) - (size / 2);
 
       Object.assign(a.style, {
         position:      'fixed',
-        bottom:        `${fixedBottom}px`,
-        right:         `${fixedRight}px`,
+        top:           `${fixedTop}px`,
+        left:          `${fixedLeft}px`,
         width:         `${size}px`,
         height:        `${size}px`,
         background:    '#e50914',
@@ -789,8 +790,9 @@
         transition:    'none'
       });
       a.className = 'vix-circle-btn vix-circle-btn-small vix-circle-btn-fixed';
-      a.dataset.containerBottom = containerRect.bottom;
-      a.dataset.containerRight = containerRect.right;
+      a.dataset.containerTop = containerRect.top;
+      a.dataset.containerLeft = containerRect.left;
+      a.dataset.containerWidth = containerRect.width;
     } else {
       // Bottoni grandi: posizionamento normale assoluto
       Object.assign(a.style, {
