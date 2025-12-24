@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         VixSrc Play HD – Trakt Anchor Observer + Detail Pages
 // @namespace    http://tampermonkey.net/
-// @version      1.24
+// @version      1.26
 // @description  ▶ pallino rosso in basso-destra su film & episodi Trakt (liste SPA + pagine dettaglio)  
 // @match        https://trakt.tv/*  
 // @require      https://cdn.jsdelivr.net/npm/hls.js@1.5.15
@@ -115,7 +115,8 @@
       const parts = finalUrl.split('?');
       finalUrl = beforeQuery.replace(/\/$/, '') + '.m3u8' + (parts[1] ? '?' + parts.slice(1).join('?') : '');
     }
-    if (parsed.canPlayFHD === true) finalUrl += '&h=1';
+    // Forza sempre h=1 per FHD (non dipendere da canPlayFHD che può essere false)
+    if (!finalUrl.includes('h=1')) finalUrl += '&h=1';
     return finalUrl;
   }
 
@@ -138,12 +139,12 @@
       hadBOriginally = /([?&])b=1(?!\d)/.test(serverUrl);
     }
 
-    const fhd = scriptText.includes('window.canPlayFHD = true') || /window\.canPlayFHD\s*=\s*true/.test(scriptText);
+    // Forza sempre h=1 per FHD
     const parts = [];
     if (hadBOriginally) parts.push('b=1');
     parts.push(`token=${tokenMatch[1]}`);
     parts.push(`expires=${expiresMatch[1]}`);
-    if (fhd) parts.push('h=1');
+    parts.push('h=1');  // Sempre FHD
     finalStreamUrl += (finalStreamUrl.includes('?') ? '&' : '?') + parts.join('&');
 
     try {
@@ -395,38 +396,6 @@
     statusEl.textContent = 'Inizializzo player...';
     Object.assign(statusEl.style, { fontSize: '13px', opacity: '0.75' });
 
-    const qualityRow = document.createElement('div');
-    Object.assign(qualityRow.style, {
-      display: 'flex',
-      alignItems: 'center',
-      gap: '8px',
-      fontSize: '12px',
-      opacity: '0.85',
-      visibility: 'visible',
-      width: '100%',
-      padding: '4px 0'
-    });
-    const qualityLabel = document.createElement('span');
-    qualityLabel.textContent = 'Qualità:';
-    Object.assign(qualityLabel.style, {
-      whiteSpace: 'nowrap'
-    });
-    const qualitySelect = document.createElement('select');
-    qualitySelect.disabled = true;
-    Object.assign(qualitySelect.style, {
-      background: '#141414',
-      color: '#fff',
-      border: '1px solid #2a2a2a',
-      borderRadius: '6px',
-      padding: '4px 6px',
-      cursor: 'pointer',
-      minWidth: '100px',
-      fontSize: '12px'
-    });
-    qualitySelect.appendChild(new Option('Auto', 'auto'));
-    qualityRow.appendChild(qualityLabel);
-    qualityRow.appendChild(qualitySelect);
-
     const video = document.createElement('video');
     video.controls = true;
     video.autoplay = true;
@@ -440,7 +409,6 @@
 
     panel.appendChild(header);
     panel.appendChild(statusEl);
-    panel.appendChild(qualityRow);
     panel.appendChild(video);
     overlay.appendChild(panel);
     overlay.addEventListener('click', (ev) => {
@@ -475,6 +443,8 @@
       });
       hls.on(HlsLib.Events.MANIFEST_PARSED, () => {
         statusEl.textContent = 'In riproduzione';
+
+        // Estrai livelli unici
         const levels = (hls.levels || []).slice();
         const unique = [];
         const seen = new Set();
@@ -485,48 +455,139 @@
           unique.push({ height: h, index: idx });
         });
         unique.sort((a, b) => b.height - a.height);
-        qualitySelect.innerHTML = '';
-        qualitySelect.appendChild(new Option('Auto', 'auto'));
-        unique.forEach(lvl => {
-          qualitySelect.appendChild(new Option(`${lvl.height}p`, String(lvl.index)));
-        });
-        qualitySelect.disabled = unique.length === 0;
 
-        const pickDefault = () => {
-          let target = unique.find(lvl => lvl.height === 1080);
-          if (!target && unique.length) target = unique[0];
-          if (target) {
-            qualitySelect.value = String(target.index);
-            hls.autoLevelEnabled = false;
-            hls.currentLevel = target.index;
-            hls.loadLevel = target.index;
-          }
-        };
-        pickDefault();
-        qualitySelect.addEventListener('change', () => {
-          const val = qualitySelect.value;
-          if (val === 'auto') {
-            hls.autoLevelEnabled = true;
+        // Crea menu qualità overlay (visibile anche a schermo intero)
+        if (unique.length > 0) {
+          const qualityBtn = document.createElement('div');
+          Object.assign(qualityBtn.style, {
+            position: 'absolute',
+            top: '10px',
+            right: '10px',
+            background: 'rgba(0,0,0,0.7)',
+            color: '#fff',
+            padding: '8px 12px',
+            borderRadius: '6px',
+            fontSize: '13px',
+            cursor: 'pointer',
+            zIndex: '10',
+            userSelect: 'none',
+            backdropFilter: 'blur(4px)'
+          });
+
+          let currentQuality = unique.find(lvl => lvl.height === 1080) || unique[0];
+          qualityBtn.textContent = `${currentQuality.height}p`;
+
+          const qualityMenu = document.createElement('div');
+          Object.assign(qualityMenu.style, {
+            position: 'absolute',
+            top: '100%',
+            right: '0',
+            marginTop: '4px',
+            background: 'rgba(0,0,0,0.85)',
+            borderRadius: '6px',
+            overflow: 'hidden',
+            display: 'none',
+            minWidth: '100px',
+            backdropFilter: 'blur(8px)'
+          });
+
+          // Aggiungi opzione Auto
+          const autoOption = document.createElement('div');
+          autoOption.textContent = 'Auto';
+          Object.assign(autoOption.style, {
+            padding: '8px 12px',
+            fontSize: '12px',
+            cursor: 'pointer',
+            borderBottom: '1px solid rgba(255,255,255,0.1)'
+          });
+          autoOption.addEventListener('mouseenter', () => autoOption.style.background = 'rgba(255,255,255,0.2)');
+          autoOption.addEventListener('mouseleave', () => autoOption.style.background = '');
+          autoOption.addEventListener('click', () => {
             hls.currentLevel = -1;
-            return;
+            hls.loadLevel = -1;
+            qualityBtn.textContent = 'Auto';
+            qualityMenu.style.display = 'none';
+          });
+          qualityMenu.appendChild(autoOption);
+
+          // Aggiungi opzioni qualità
+          unique.forEach(lvl => {
+            const option = document.createElement('div');
+            option.textContent = `${lvl.height}p`;
+            Object.assign(option.style, {
+              padding: '8px 12px',
+              fontSize: '12px',
+              cursor: 'pointer',
+              borderBottom: lvl === unique[unique.length - 1] ? 'none' : '1px solid rgba(255,255,255,0.1)'
+            });
+            option.addEventListener('mouseenter', () => option.style.background = 'rgba(255,255,255,0.2)');
+            option.addEventListener('mouseleave', () => option.style.background = '');
+            option.addEventListener('click', () => {
+              const currentTime = video.currentTime;
+              hls.currentLevel = lvl.index;
+              hls.loadLevel = lvl.index;
+              qualityBtn.textContent = `${lvl.height}p`;
+              qualityMenu.style.display = 'none';
+
+              // Forza ricaricamento a nuova qualità preservando posizione
+              setTimeout(() => {
+                if (Math.abs(video.currentTime - currentTime) > 2) {
+                  video.currentTime = currentTime;
+                }
+              }, 100);
+            });
+            qualityMenu.appendChild(option);
+          });
+
+          qualityBtn.appendChild(qualityMenu);
+          qualityBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            qualityMenu.style.display = qualityMenu.style.display === 'none' ? 'block' : 'none';
+          });
+
+          // Posiziona il bottone relativo al contenitore del video
+          const videoContainer = video.parentElement;
+          videoContainer.style.position = 'relative';
+          videoContainer.appendChild(qualityBtn);
+
+          // Imposta qualità iniziale a 1080p (o massima disponibile)
+          if (currentQuality) {
+            hls.currentLevel = currentQuality.index;
+            hls.loadLevel = currentQuality.index;
+            console.log(`[VixSrc] Qualità iniziale impostata a ${currentQuality.height}p (livello ${currentQuality.index})`);
           }
-          const idx = parseInt(val, 10);
-          if (!Number.isNaN(idx)) {
-            hls.autoLevelEnabled = false;
-            hls.currentLevel = idx;
-            hls.loadLevel = idx;
-          }
-        });
+        }
 
         video.play().catch(() => {});
       });
       hls.on(HlsLib.Events.ERROR, (_, data) => {
         if (!data) return;
+
+        // Ignora errori non fatali dei sottotitoli
+        if (data.type === 'otherError' && data.details === 'internalException' && data.fatal === false) {
+          console.warn('HLS: errore non fatale ignorato', data);
+          return;
+        }
+
         const detail = data.details ? ` (${data.details})` : '';
         const msg = 'Errore player: ' + (data.type || 'unknown') + detail;
-        statusEl.textContent = msg;
+
         if (data.fatal) {
-          try { hls.destroy(); } catch {}
+          statusEl.textContent = msg;
+
+          // Tenta recovery per errori di rete
+          if (data.type === HlsLib.ErrorTypes.NETWORK_ERROR) {
+            console.log('HLS: tentativo di recovery per errore di rete');
+            hls.startLoad();
+          } else if (data.type === HlsLib.ErrorTypes.MEDIA_ERROR) {
+            console.log('HLS: tentativo di recovery per errore media');
+            hls.recoverMediaError();
+          } else {
+            console.error('HLS: errore fatale non recuperabile', data);
+            try { hls.destroy(); } catch {}
+          }
+        } else {
+          console.warn('HLS: errore non fatale', data);
         }
       });
     }).catch(() => {
