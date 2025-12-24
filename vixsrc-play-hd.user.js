@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         VixSrc Play HD – Trakt Anchor Observer + Detail Pages
 // @namespace    http://tampermonkey.net/
-// @version      1.27
+// @version      1.28
 // @description  ▶ pallino rosso in basso-destra su film & episodi Trakt (liste SPA + pagine dettaglio)  
 // @match        https://trakt.tv/*  
 // @require      https://cdn.jsdelivr.net/npm/hls.js@1.5.15
@@ -472,20 +472,26 @@
 
         // Crea menu qualità overlay (visibile anche a schermo intero)
         if (unique.length > 0) {
-          const qualityBtn = document.createElement('div');
-          Object.assign(qualityBtn.style, {
+          // Container per badge + menu
+          const qualityContainer = document.createElement('div');
+          Object.assign(qualityContainer.style, {
             position: 'absolute',
             top: '10px',
             right: '10px',
+            zIndex: '10'
+          });
+
+          const qualityBtn = document.createElement('div');
+          Object.assign(qualityBtn.style, {
             background: 'rgba(0,0,0,0.7)',
             color: '#fff',
             padding: '8px 12px',
             borderRadius: '6px',
             fontSize: '13px',
             cursor: 'pointer',
-            zIndex: '10',
             userSelect: 'none',
-            backdropFilter: 'blur(4px)'
+            backdropFilter: 'blur(4px)',
+            whiteSpace: 'nowrap'
           });
 
           let currentQuality = unique.find(lvl => lvl.height === 1080) || unique[0];
@@ -494,9 +500,8 @@
           const qualityMenu = document.createElement('div');
           Object.assign(qualityMenu.style, {
             position: 'absolute',
-            top: '100%',
+            top: 'calc(100% + 4px)',
             right: '0',
-            marginTop: '4px',
             background: 'rgba(0,0,0,0.85)',
             borderRadius: '6px',
             overflow: 'hidden',
@@ -570,16 +575,28 @@
             qualityMenu.appendChild(option);
           });
 
-          qualityBtn.appendChild(qualityMenu);
+          // Assembla il container
+          qualityContainer.appendChild(qualityBtn);
+          qualityContainer.appendChild(qualityMenu);
+
+          // Toggle menu al click del badge
           qualityBtn.addEventListener('click', (e) => {
             e.stopPropagation();
-            qualityMenu.style.display = qualityMenu.style.display === 'none' ? 'block' : 'none';
+            const isVisible = qualityMenu.style.display === 'block';
+            qualityMenu.style.display = isVisible ? 'none' : 'block';
           });
 
-          // Posiziona il bottone relativo al contenitore del video
+          // Chiudi menu se clicchi fuori
+          document.addEventListener('click', (e) => {
+            if (!qualityContainer.contains(e.target)) {
+              qualityMenu.style.display = 'none';
+            }
+          });
+
+          // Posiziona il container relativo al video
           const videoContainer = video.parentElement;
           videoContainer.style.position = 'relative';
-          videoContainer.appendChild(qualityBtn);
+          videoContainer.appendChild(qualityContainer);
 
           // Imposta qualità iniziale a 1080p (o massima disponibile)
           if (currentQuality) {
