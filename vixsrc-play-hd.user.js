@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         VixSrc Play HD – Trakt Anchor Observer + Detail Pages
 // @namespace    http://tampermonkey.net/
-// @version      1.37
+// @version      1.38
 // @description  ▶ pallino rosso in basso-destra su film & episodi Trakt (liste SPA + pagine dettaglio)  
 // @match        https://trakt.tv/*  
 // @require      https://cdn.jsdelivr.net/npm/hls.js@1.5.15
@@ -748,24 +748,27 @@
   }
 
   // ◆ Crea il pallino rosso ▶ (responsive)
-  function createCircleBtn(url) {
+  function createCircleBtn(url, isSmall = false) {
     const a = document.createElement('a');
     a.href = 'javascript:void(0)';
     a.removeAttribute('target');
     a.rel = 'noopener noreferrer';
     a.textContent = '▶';
 
-    // Bottone più piccolo di default (28px) per essere sempre visibile
-    // Su desktop (>768px) torna a 36px
+    // Dimensioni base in base al tipo
+    const size = isSmall ? 15 : 28;
+    const fontSize = isSmall ? 8 : 14;
+    const margin = isSmall ? 3 : 6;
+
     Object.assign(a.style, {
       position:      'absolute',
-      bottom:        '6px',
-      right:         '6px',
-      width:         '28px',
-      height:        '28px',
+      bottom:        `${margin}px`,
+      right:         `${margin}px`,
+      width:         `${size}px`,
+      height:        `${size}px`,
       background:    '#e50914',
       color:         '#fff',
-      fontSize:      '14px',
+      fontSize:      `${fontSize}px`,
       display:       'flex',
       alignItems:    'center',
       justifyContent:'center',
@@ -776,7 +779,7 @@
       pointerEvents: 'auto',
       transition:    'all 0.2s ease'
     });
-    a.className = 'vix-circle-btn';
+    a.className = isSmall ? 'vix-circle-btn vix-circle-btn-small' : 'vix-circle-btn';
     ['pointerdown', 'touchstart'].forEach(evt => {
       a.addEventListener(evt, (ev) => {
         ev.preventDefault();
@@ -817,73 +820,20 @@
       return;
     }
 
-    // Se la locandina è piccola (< 80px), usa posizionamento overlay fisso
-    if (rect.width < 80 || rect.height < 80) {
-      console.log(`[VixSrc] Locandina piccola, uso overlay fisso`);
-      injectCircleOverlay(container, url);
-    } else {
-      // Posizionamento normale (dentro il container)
-      if (getComputedStyle(container).position === 'static') {
-        container.style.position = 'relative';
-      }
-      // Forza overflow visible per evitare che il bottone venga tagliato
-      const overflow = getComputedStyle(container).overflow;
-      if (overflow === 'hidden') {
-        container.style.overflow = 'visible';
-      }
-      container.appendChild(createCircleBtn(url));
-      console.log(`[VixSrc] Bottone inserito dentro container (${rect.width}x${rect.height})`);
+    // Determina se la locandina è piccola
+    const isSmall = rect.width < 80 || rect.height < 80;
+
+    // Posizionamento normale (dentro il container)
+    if (getComputedStyle(container).position === 'static') {
+      container.style.position = 'relative';
     }
-  }
-
-  // ◆ Inietta bottone come overlay fisso (per locandine piccole)
-  function injectCircleOverlay(container, url) {
-    const btn = createCircleBtn(url);
-
-    // Usa fixed positioning invece di absolute
-    btn.style.position = 'fixed';
-    btn.style.zIndex = '99999';
-
-    // Funzione per aggiornare la posizione
-    const updatePosition = () => {
-      const rect = container.getBoundingClientRect();
-      if (rect.width > 0 && rect.height > 0) {
-        // Posiziona in basso a destra della locandina
-        btn.style.left = `${rect.right - 28}px`;
-        btn.style.top = `${rect.bottom - 28}px`;
-        btn.style.bottom = 'auto';
-        btn.style.right = 'auto';
-      }
-    };
-
-    // Posiziona inizialmente
-    updatePosition();
-
-    // Aggiungi al body invece che al container
-    document.body.appendChild(btn);
-
-    // Aggiorna posizione su scroll e resize
-    let scrollTimeout;
-    const onScroll = () => {
-      clearTimeout(scrollTimeout);
-      scrollTimeout = setTimeout(updatePosition, 50);
-    };
-
-    window.addEventListener('scroll', onScroll, { passive: true });
-    window.addEventListener('resize', updatePosition);
-
-    // Rimuovi listener quando il container non esiste più
-    const observer = new MutationObserver(() => {
-      if (!document.body.contains(container)) {
-        btn.remove();
-        window.removeEventListener('scroll', onScroll);
-        window.removeEventListener('resize', updatePosition);
-        observer.disconnect();
-      }
-    });
-    observer.observe(document.body, { childList: true, subtree: true });
-
-    console.log(`[VixSrc] Bottone overlay creato per locandina piccola`);
+    // Forza overflow visible per evitare che il bottone venga tagliato
+    const overflow = getComputedStyle(container).overflow;
+    if (overflow === 'hidden') {
+      container.style.overflow = 'visible';
+    }
+    container.appendChild(createCircleBtn(url, isSmall));
+    console.log(`[VixSrc] Bottone ${isSmall ? 'piccolo (15px)' : 'normale (28px)'} inserito in container (${rect.width}x${rect.height})`);
   }
 
 
