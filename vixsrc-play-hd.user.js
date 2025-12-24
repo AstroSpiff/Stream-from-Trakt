@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         VixSrc Play HD – Trakt Anchor Observer + Detail Pages
 // @namespace    http://tampermonkey.net/
-// @version      1.46
+// @version      1.47
 // @description  ▶ pallino rosso in basso-destra su film & episodi Trakt (liste SPA + pagine dettaglio)
 // @match        https://trakt.tv/*
 // @require      https://cdn.jsdelivr.net/npm/hls.js@1.5.15
@@ -16,42 +16,20 @@
 ;(function(){
   'use strict';
 
-  // ◆ Aggiungi stili CSS responsive per il bottone play
+  // ◆ Aggiungi stili CSS per il bottone play (40px fissi, top-left, tutte le dimensioni)
   const style = document.createElement('style');
   style.textContent = `
-    /* Mobile: bottone piccolo */
+    /* Dimensioni fisse 40px per tutti i dispositivi, posizionato in alto a sinistra */
     .vix-circle-btn {
-      width: 24px !important;
-      height: 24px !important;
-      font-size: 12px !important;
-      bottom: 4px !important;
-      right: 4px !important;
+      width: 40px !important;
+      height: 40px !important;
+      font-size: 18px !important;
+      top: 6px !important;
+      left: 6px !important;
       display: flex !important;
       z-index: 99999 !important;
       visibility: visible !important;
       opacity: 1 !important;
-    }
-
-    /* Tablet: bottone medio */
-    @media (min-width: 480px) {
-      .vix-circle-btn {
-        width: 28px !important;
-        height: 28px !important;
-        font-size: 14px !important;
-        bottom: 6px !important;
-        right: 6px !important;
-      }
-    }
-
-    /* Desktop: bottone grande */
-    @media (min-width: 768px) {
-      .vix-circle-btn {
-        width: 36px !important;
-        height: 36px !important;
-        font-size: 18px !important;
-        bottom: 10px !important;
-        right: 10px !important;
-      }
     }
 
     /* Hover effect */
