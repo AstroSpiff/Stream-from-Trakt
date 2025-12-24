@@ -28,6 +28,8 @@
       right: 4px !important;
       display: flex !important;
       z-index: 99999 !important;
+      visibility: visible !important;
+      opacity: 1 !important;
     }
 
     /* Tablet: bottone medio */
@@ -920,6 +922,10 @@
 
   // ◆ Processa ogni <a> “movie” o “episode” nelle liste/dashboard
   async function processAnchor(a) {
+    // Se l'elemento è nascosto (width/height 0), salta per ora.
+    // Verrà ripreso dal listener 'resize' quando diventerà visibile.
+    if (a.offsetWidth === 0 && a.offsetHeight === 0) return;
+
     if (a.__vix_processed) return;
     a.__vix_processed = true;
 
@@ -1068,6 +1074,13 @@
   window.addEventListener('popstate', rescan);
   window.addEventListener('hashchange', rescan);
   window.addEventListener('pageshow', rescan);
+
+  // Riscansiona al ridimensionamento per catturare elementi che diventano visibili
+  let resizeTimer;
+  window.addEventListener('resize', () => {
+    clearTimeout(resizeTimer);
+    resizeTimer = setTimeout(scanAllAnchors, 500);
+  }, { passive: true });
 
   // ── Observer per intercettare nuovi <a> nel DOM ──────────────────────────
   const observer = new MutationObserver(muts => {
