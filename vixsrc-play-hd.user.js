@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         VixSrc Play HD – Trakt Anchor Observer + Detail Pages
 // @namespace    http://tampermonkey.net/
-// @version      1.26
+// @version      1.27
 // @description  ▶ pallino rosso in basso-destra su film & episodi Trakt (liste SPA + pagine dettaglio)  
 // @match        https://trakt.tv/*  
 // @require      https://cdn.jsdelivr.net/npm/hls.js@1.5.15
@@ -434,7 +434,21 @@
         loader: Loader,
         enableWorker: true,
         lowLatencyMode: false,
-        backBufferLength: 60
+        backBufferLength: 60,
+        maxBufferLength: 30,
+        maxMaxBufferLength: 60,
+        maxBufferSize: 60 * 1000 * 1000,
+        // Configurazione retry per network errors
+        manifestLoadingRetryDelay: 1000,
+        manifestLoadingMaxRetry: 3,
+        levelLoadingRetryDelay: 1000,
+        levelLoadingMaxRetry: 4,
+        fragLoadingRetryDelay: 1000,
+        fragLoadingMaxRetry: 6,
+        // ABR ottimizzato per cambio qualità manuale
+        abrEwmaDefaultEstimate: 5000000,
+        abrBandWidthFactor: 0.95,
+        abrBandWidthUpFactor: 0.7
       });
       activePlayer.hls = hls;
       hls.attachMedia(video);
@@ -523,18 +537,35 @@
             option.addEventListener('mouseenter', () => option.style.background = 'rgba(255,255,255,0.2)');
             option.addEventListener('mouseleave', () => option.style.background = '');
             option.addEventListener('click', () => {
+              if (hls.currentLevel === lvl.index) {
+                qualityMenu.style.display = 'none';
+                return; // Già alla qualità selezionata
+              }
+
               const currentTime = video.currentTime;
+              const wasPlaying = !video.paused;
+
+              // Cambia livello e forza il reload
+              hls.nextLevel = lvl.index;
               hls.currentLevel = lvl.index;
               hls.loadLevel = lvl.index;
+
               qualityBtn.textContent = `${lvl.height}p`;
               qualityMenu.style.display = 'none';
 
-              // Forza ricaricamento a nuova qualità preservando posizione
-              setTimeout(() => {
-                if (Math.abs(video.currentTime - currentTime) > 2) {
-                  video.currentTime = currentTime;
+              console.log(`[VixSrc] Cambio qualità a ${lvl.height}p (livello ${lvl.index}) al tempo ${currentTime.toFixed(2)}s`);
+
+              // Attendi che il nuovo livello sia caricato
+              const onLevelSwitched = () => {
+                console.log('[VixSrc] Livello caricato, ripristino posizione');
+                video.currentTime = currentTime;
+                if (wasPlaying) {
+                  video.play().catch(() => {});
                 }
-              }, 100);
+                hls.off(HlsLib.Events.LEVEL_SWITCHED, onLevelSwitched);
+              };
+
+              hls.once(HlsLib.Events.LEVEL_SWITCHED, onLevelSwitched);
             });
             qualityMenu.appendChild(option);
           });
@@ -560,12 +591,21 @@
 
         video.play().catch(() => {});
       });
+      let networkErrorRetries = 0;
+      const MAX_NETWORK_RETRIES = 3;
+
       hls.on(HlsLib.Events.ERROR, (_, data) => {
         if (!data) return;
 
         // Ignora errori non fatali dei sottotitoli
         if (data.type === 'otherError' && data.details === 'internalException' && data.fatal === false) {
           console.warn('HLS: errore non fatale ignorato', data);
+          return;
+        }
+
+        // Errori di caricamento frammenti durante cambio qualità (non fatali)
+        if (data.details === 'fragLoadError' && !data.fatal) {
+          console.warn('HLS: errore caricamento frammento (non fatale), HLS gestirà il retry automatico');
           return;
         }
 
@@ -577,8 +617,15 @@
 
           // Tenta recovery per errori di rete
           if (data.type === HlsLib.ErrorTypes.NETWORK_ERROR) {
-            console.log('HLS: tentativo di recovery per errore di rete');
-            hls.startLoad();
+            networkErrorRetries++;
+            if (networkErrorRetries <= MAX_NETWORK_RETRIES) {
+              console.log(`HLS: tentativo di recovery per errore di rete (${networkErrorRetries}/${MAX_NETWORK_RETRIES})`);
+              hls.startLoad();
+              statusEl.textContent = `Riprovo caricamento... (${networkErrorRetries}/${MAX_NETWORK_RETRIES})`;
+            } else {
+              console.error('HLS: troppi errori di rete, arrendo');
+              statusEl.textContent = 'Errore di rete: impossibile caricare il video';
+            }
           } else if (data.type === HlsLib.ErrorTypes.MEDIA_ERROR) {
             console.log('HLS: tentativo di recovery per errore media');
             hls.recoverMediaError();
@@ -588,6 +635,15 @@
           }
         } else {
           console.warn('HLS: errore non fatale', data);
+        }
+      });
+
+      // Reset contatore errori quando il playback riprende
+      hls.on(HlsLib.Events.FRAG_LOADED, () => {
+        if (networkErrorRetries > 0) {
+          console.log('[VixSrc] Playback ripreso, reset contatore errori');
+          networkErrorRetries = 0;
+          statusEl.textContent = 'In riproduzione';
         }
       });
     }).catch(() => {
