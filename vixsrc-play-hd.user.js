@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         VixSrc Play HD – Trakt Anchor Observer + Detail Pages
 // @namespace    http://tampermonkey.net/
-// @version      1.42
+// @version      1.43
 // @description  ▶ pallino rosso in basso-destra su film & episodi Trakt (liste SPA + pagine dettaglio)
 // @match        https://trakt.tv/*
 // @require      https://cdn.jsdelivr.net/npm/hls.js@1.5.15
@@ -833,23 +833,28 @@
   function injectCircle(container, url) {
     if (!container) return;
 
-    // Se già esiste un bottone, skip
-    if (container.querySelector('.vix-circle-btn') ||
-        container.dataset.vixButton === 'added') {
+    // Controlla sia nel container che nel body per bottoni fixed
+    const hasButtonInContainer = container.querySelector('.vix-circle-btn');
+    const containerID = container.dataset.vixButtonId || `vix-${Date.now()}-${Math.random().toString(36).substring(2, 11)}`;
+    const hasFixedButton = document.querySelector(`.vix-circle-btn-fixed[data-vix-container="${containerID}"]`);
+
+    if (hasButtonInContainer || hasFixedButton || container.dataset.vixButton === 'added') {
       return;
     }
 
-    // Marca il container come processato
+    // Marca il container con un ID univoco
+    container.dataset.vixButtonId = containerID;
     container.dataset.vixButton = 'added';
 
     // Verifica dimensioni del container
     const rect = container.getBoundingClientRect();
-    console.log(`[VixSrc] injectCircle: container size ${rect.width}x${rect.height}`);
+    console.log(`[VixSrc] injectCircle: container size ${rect.width}x${rect.height}, ID: ${containerID}`);
 
     // Se troppo piccolo o non visibile, ritenta dopo un delay
     if (rect.width < 20 || rect.height < 20) {
       setTimeout(() => {
         container.dataset.vixButton = '';
+        container.dataset.vixButtonId = '';
         injectCircle(container, url);
       }, 500);
       return;
@@ -861,12 +866,17 @@
     if (isSmall) {
       // Bottone piccolo: usa position:fixed aggiunto a body
       const btn = createCircleBtn(url, true, rect);
-      btn.dataset.vixContainer = container.dataset.vixButton;
+      btn.dataset.vixContainer = containerID;
       document.body.appendChild(btn);
-      console.log(`[VixSrc] Bottone piccolo (15px) position:fixed inserito per container (${rect.width}x${rect.height})`);
+      console.log(`[VixSrc] Bottone piccolo (15px) position:fixed inserito per container ID ${containerID} (${rect.width}x${rect.height})`);
 
       // Aggiorna posizione su scroll/resize
       const updatePosition = () => {
+        // Verifica che il container esista ancora
+        if (!document.body.contains(container)) {
+          btn.remove();
+          return;
+        }
         const newRect = container.getBoundingClientRect();
         const fixedBottom = window.innerHeight - newRect.bottom + 3;
         const fixedRight = window.innerWidth - newRect.right + 3;
@@ -877,12 +887,13 @@
       window.addEventListener('scroll', updatePosition, { passive: true });
       window.addEventListener('resize', updatePosition, { passive: true });
 
-      // Rimuovi listener quando il bottone viene rimosso
+      // Rimuovi listener quando il bottone o container vengono rimossi
       const observer = new MutationObserver(() => {
-        if (!document.body.contains(btn)) {
+        if (!document.body.contains(btn) || !document.body.contains(container)) {
           window.removeEventListener('scroll', updatePosition);
           window.removeEventListener('resize', updatePosition);
           observer.disconnect();
+          if (document.body.contains(btn)) btn.remove();
         }
       });
       observer.observe(document.body, { childList: true, subtree: true });
