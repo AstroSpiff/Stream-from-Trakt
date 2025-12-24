@@ -759,20 +759,20 @@
     a.rel = 'noopener noreferrer';
     a.textContent = '▶';
 
-    // Dimensioni base in base al tipo
-    const size = isSmall ? 24 : 28;
-    const fontSize = isSmall ? 12 : 14;
-    const margin = isSmall ? 4 : 6;
+    // Dimensioni base in base al tipo (stesse dimensioni per entrambi)
+    const size = 28;
+    const fontSize = 14;
+    const margin = 6;
 
     // Per bottoni piccoli usa position:fixed per evitare clipping da overflow:hidden
     if (isSmall && containerRect) {
-      // Calcola posizione: basso a destra della locandina
-      const fixedBottom = window.innerHeight - containerRect.bottom + margin;
+      // Calcola posizione: alto a destra della locandina
+      const fixedTop = containerRect.top + margin;
       const fixedRight = window.innerWidth - containerRect.right + margin;
 
       Object.assign(a.style, {
         position:      'fixed',
-        bottom:        `${fixedBottom}px`,
+        top:           `${fixedTop}px`,
         right:         `${fixedRight}px`,
         width:         `${size}px`,
         height:        `${size}px`,
@@ -790,7 +790,7 @@
         transition:    'none'
       });
       a.className = 'vix-circle-btn vix-circle-btn-small vix-circle-btn-fixed';
-      a.dataset.containerBottom = containerRect.bottom;
+      a.dataset.containerTop = containerRect.top;
       a.dataset.containerRight = containerRect.right;
     } else {
       // Bottoni grandi: posizionamento normale assoluto
@@ -869,7 +869,7 @@
       const btn = createCircleBtn(url, true, rect);
       btn.dataset.vixContainer = containerID;
       document.body.appendChild(btn);
-      console.log(`[VixSrc] Bottone piccolo (24px) position:fixed inserito per container ID ${containerID} (${rect.width}x${rect.height})`);
+      console.log(`[VixSrc] Bottone piccolo (28px) position:fixed inserito per container ID ${containerID} (${rect.width}x${rect.height})`);
 
       // Aggiorna posizione su scroll/resize
       const updatePosition = () => {
@@ -879,9 +879,9 @@
           return;
         }
         const newRect = container.getBoundingClientRect();
-        const fixedBottom = window.innerHeight - newRect.bottom + 4;
-        const fixedRight = window.innerWidth - newRect.right + 4;
-        btn.style.bottom = `${fixedBottom}px`;
+        const fixedTop = newRect.top + 6;
+        const fixedRight = window.innerWidth - newRect.right + 6;
+        btn.style.top = `${fixedTop}px`;
         btn.style.right = `${fixedRight}px`;
       };
 
