@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         VixSrc Play HD – Trakt Anchor Observer + Detail Pages
 // @namespace    http://tampermonkey.net/
-// @version      1.17
+// @version      1.18
 // @description  ▶ pallino rosso in basso-destra su film & episodi Trakt (liste SPA + pagine dettaglio)  
 // @match        https://trakt.tv/*  
 // @require      https://cdn.jsdelivr.net/npm/hls.js@1.5.15
@@ -205,9 +205,12 @@
         this.callbacks = callbacks;
         const now = (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now();
         this.stats = { trequest: now, tfirst: 0, tload: 0, loaded: 0, total: 0 };
-        const isBinary = context.type === 'fragment' || context.type === 'key';
-        const responseType = isBinary ? 'arraybuffer' : 'text';
+        const isBinary = context.responseType === 'arraybuffer' || context.type === 'fragment' || context.type === 'key';
+        const responseType = context.responseType || (isBinary ? 'arraybuffer' : 'text');
         const headers = Object.assign({}, baseHeaders, config.headers || {}, context.headers || {});
+        if (typeof context.rangeStart === 'number' && typeof context.rangeEnd === 'number') {
+          headers.Range = `bytes=${context.rangeStart}-${context.rangeEnd - 1}`;
+        }
         this.request = GM_XHR({
           method: 'GET',
           url: context.url,
@@ -215,9 +218,14 @@
           responseType,
           timeout: config.timeout || 20000,
           onload: (res) => {
+            if (res.status < 200 || res.status >= 300) {
+              callbacks.onError({ code: res.status || 0, text: 'HTTP ' + res.status }, context, res);
+              return;
+            }
             const tload = (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now();
             this.stats.tload = tload;
-            const data = isBinary ? res.response : res.responseText;
+            if (!this.stats.tfirst) this.stats.tfirst = tload;
+            const data = isBinary ? res.response : (res.responseText || res.response || '');
             const size = isBinary && data ? data.byteLength : (data ? data.length : 0);
             this.stats.loaded = size;
             this.stats.total = size;
@@ -389,7 +397,12 @@
       }
       statusEl.textContent = 'Carico stream...';
       const Loader = createGmHlsLoader(referer);
-      const hls = new HlsLib({ loader: Loader, enableWorker: true });
+      const hls = new HlsLib({
+        loader: Loader,
+        enableWorker: true,
+        lowLatencyMode: false,
+        backBufferLength: 60
+      });
       activePlayer.hls = hls;
       hls.attachMedia(video);
       hls.on(HlsLib.Events.MEDIA_ATTACHED, () => {
@@ -400,8 +413,11 @@
         video.play().catch(() => {});
       });
       hls.on(HlsLib.Events.ERROR, (_, data) => {
-        if (data && data.fatal) {
-          statusEl.textContent = 'Errore player: ' + (data.type || 'unknown');
+        if (!data) return;
+        const detail = data.details ? ` (${data.details})` : '';
+        const msg = 'Errore player: ' + (data.type || 'unknown') + detail;
+        statusEl.textContent = msg;
+        if (data.fatal) {
           try { hls.destroy(); } catch {}
         }
       });
