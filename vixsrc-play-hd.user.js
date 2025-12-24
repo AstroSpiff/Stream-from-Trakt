@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         VixSrc Play HD – Trakt Anchor Observer + Detail Pages
 // @namespace    http://tampermonkey.net/
-// @version      1.21
+// @version      1.22
 // @description  ▶ pallino rosso in basso-destra su film & episodi Trakt (liste SPA + pagine dettaglio)  
 // @match        https://trakt.tv/*  
 // @require      https://cdn.jsdelivr.net/npm/hls.js@1.5.15
@@ -222,13 +222,21 @@
         const isBinary = context.responseType === 'arraybuffer' || context.type === 'fragment' || context.type === 'key';
         const responseType = context.responseType || (isBinary ? 'arraybuffer' : 'text');
         const headers = Object.assign({}, baseHeaders, config.headers || {}, context.headers || {});
-        const hasRangeStart = typeof context.rangeStart === 'number' && isFinite(context.rangeStart) && context.rangeStart >= 0;
-        const hasRangeEnd = typeof context.rangeEnd === 'number' && isFinite(context.rangeEnd) && context.rangeEnd > 0;
-        const hasRangeLength = typeof context.rangeLength === 'number' && isFinite(context.rangeLength) && context.rangeLength > 0;
-        if (isBinary && hasRangeStart && hasRangeEnd && context.rangeEnd > context.rangeStart) {
-          headers.Range = `bytes=${context.rangeStart}-${context.rangeEnd - 1}`;
-        } else if (isBinary && hasRangeStart && hasRangeLength) {
-          headers.Range = `bytes=${context.rangeStart}-${context.rangeStart + context.rangeLength - 1}`;
+
+        // Non inviare Range header per sottotitoli o playlist
+        const isSubtitle = context.type === 'subtitle' || /\.vtt$/i.test(context.url);
+        const isPlaylist = context.type === 'manifest' || /\.m3u8$/i.test(context.url);
+
+        if (isBinary && !isSubtitle && !isPlaylist) {
+          const hasRangeStart = typeof context.rangeStart === 'number' && isFinite(context.rangeStart) && context.rangeStart >= 0;
+          const hasRangeEnd = typeof context.rangeEnd === 'number' && isFinite(context.rangeEnd) && context.rangeEnd > 0;
+          const hasRangeLength = typeof context.rangeLength === 'number' && isFinite(context.rangeLength) && context.rangeLength > 0;
+
+          if (hasRangeStart && hasRangeEnd && context.rangeEnd > context.rangeStart) {
+            headers.Range = `bytes=${context.rangeStart}-${context.rangeEnd - 1}`;
+          } else if (hasRangeStart && hasRangeLength) {
+            headers.Range = `bytes=${context.rangeStart}-${context.rangeStart + context.rangeLength - 1}`;
+          }
         }
         this.request = GM_XHR({
           method: 'GET',
