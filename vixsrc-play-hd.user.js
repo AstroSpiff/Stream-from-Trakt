@@ -1,9 +1,10 @@
 // ==UserScript==
 // @name         VixSrc Play HD – Trakt Anchor Observer + Detail Pages
 // @namespace    http://tampermonkey.net/
-// @version      1.15
+// @version      1.16
 // @description  ▶ pallino rosso in basso-destra su film & episodi Trakt (liste SPA + pagine dettaglio)  
 // @match        https://trakt.tv/*  
+// @require      https://cdn.jsdelivr.net/npm/hls.js@1.5.15
 // @grant        GM_xmlhttpRequest
 // @grant        GM.xmlHttpRequest
 // @connect      vixsrc.to
@@ -17,6 +18,9 @@
   const GM_XHR = typeof GM_xmlhttpRequest === 'function'
     ? GM_xmlhttpRequest
     : (typeof GM !== 'undefined' && typeof GM.xmlHttpRequest === 'function' ? GM.xmlHttpRequest : null);
+  const HLS_SRC = 'https://cdn.jsdelivr.net/npm/hls.js@1.5.15';
+  let hlsReady = null;
+  let activePlayer = null;
 
   function gmFetchText(url, referer) {
     if (!GM_XHR) {
@@ -158,6 +162,112 @@
     return finalStreamUrl;
   }
 
+  function ensureHlsReady() {
+    if (typeof Hls !== 'undefined') return Promise.resolve(Hls);
+    if (window.Hls) return Promise.resolve(window.Hls);
+    if (hlsReady) return hlsReady;
+    hlsReady = new Promise((resolve, reject) => {
+      const s = document.createElement('script');
+      s.src = HLS_SRC;
+      s.async = true;
+      s.onload = () => resolve(window.Hls || (typeof Hls !== 'undefined' ? Hls : null));
+      s.onerror = () => reject(new Error('hls.js load failed'));
+      document.head.appendChild(s);
+    });
+    return hlsReady;
+  }
+
+  function buildRequestHeaders(referer) {
+    const headers = { Accept: '*/*' };
+    if (referer) {
+      headers.Referer = referer;
+      try {
+        headers.Origin = new URL(referer).origin;
+      } catch {}
+    }
+    return headers;
+  }
+
+  function createGmHlsLoader(referer) {
+    const baseHeaders = buildRequestHeaders(referer);
+    return class GmHlsLoader {
+      constructor(config) {
+        this.config = config;
+        this.stats = {};
+        this.context = null;
+        this.callbacks = null;
+        this.request = null;
+      }
+
+      load(context, config, callbacks) {
+        this.context = context;
+        this.callbacks = callbacks;
+        const now = (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now();
+        this.stats = { trequest: now, tfirst: 0, tload: 0, loaded: 0, total: 0 };
+        const isBinary = context.type === 'fragment' || context.type === 'key';
+        const responseType = isBinary ? 'arraybuffer' : 'text';
+        const headers = Object.assign({}, baseHeaders, config.headers || {}, context.headers || {});
+        this.request = GM_XHR({
+          method: 'GET',
+          url: context.url,
+          headers,
+          responseType,
+          timeout: config.timeout || 20000,
+          onload: (res) => {
+            const tload = (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now();
+            this.stats.tload = tload;
+            const data = isBinary ? res.response : res.responseText;
+            const size = isBinary && data ? data.byteLength : (data ? data.length : 0);
+            this.stats.loaded = size;
+            this.stats.total = size;
+            callbacks.onSuccess({ url: context.url, data }, this.stats, context, res);
+          },
+          onprogress: (res) => {
+            if (!this.stats.tfirst) {
+              this.stats.tfirst = (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now();
+            }
+            if (res.lengthComputable) {
+              this.stats.loaded = res.loaded;
+              this.stats.total = res.total;
+            }
+            if (callbacks.onProgress) callbacks.onProgress(this.stats, context, res);
+          },
+          onerror: (res) => {
+            callbacks.onError({ code: res && res.status ? res.status : 0, text: 'GM xhr error' }, context, res);
+          },
+          ontimeout: () => {
+            callbacks.onTimeout(this.stats, context, null);
+          }
+        });
+      }
+
+      abort() {
+        if (this.request && this.request.abort) this.request.abort();
+      }
+
+      destroy() {
+        this.abort();
+        this.request = null;
+        this.context = null;
+        this.callbacks = null;
+      }
+    };
+  }
+
+  function closePlayer() {
+    if (!activePlayer) return;
+    try {
+      if (activePlayer.hls) activePlayer.hls.destroy();
+    } catch {}
+    if (activePlayer.overlay && activePlayer.overlay.parentNode) {
+      activePlayer.overlay.parentNode.removeChild(activePlayer.overlay);
+    }
+    if (activePlayer.onKey) {
+      document.removeEventListener('keydown', activePlayer.onKey);
+    }
+    activePlayer = null;
+  }
+
   async function resolveVixStream(url) {
     if (!GM_XHR) return null;
     const primaryHtml = await gmFetchText(url, location.href);
@@ -188,62 +298,116 @@
     return null;
   }
 
-  function openPlayer(streamUrl, title) {
+  function openPlayer(streamUrl, title, referer) {
+    closePlayer();
     const safeTitle = title || 'VixSrc Stream';
-    const html = [
-      '<!doctype html>',
-      '<html>',
-      '<head>',
-      '<meta charset="utf-8">',
-      '<meta name="viewport" content="width=device-width, initial-scale=1">',
-      '<title>' + safeTitle.replace(/</g, '&lt;') + '</title>',
-      '<style>',
-      'html,body{margin:0;padding:0;background:#0b0b0b;color:#fff;height:100%;font-family:Arial,sans-serif;}',
-      '#wrap{height:100%;display:flex;align-items:center;justify-content:center;flex-direction:column;gap:12px;}',
-      'video{width:92vw;max-width:1200px;max-height:76vh;background:#000;border-radius:8px;}',
-      '#status{font-size:14px;opacity:0.8;}',
-      '</style>',
-      '</head>',
-      '<body>',
-      '<div id="wrap">',
-      '<div id="status">Loading stream...</div>',
-      '<video id="v" controls autoplay playsinline></video>',
-      '</div>',
-      '<script>',
-      'const streamUrl=' + JSON.stringify(streamUrl) + ';',
-      'const statusEl=document.getElementById("status");',
-      'const video=document.getElementById("v");',
-      'function fail(msg){statusEl.textContent=msg;}',
-      'if (video.canPlayType("application/vnd.apple.mpegurl")) {',
-      '  video.src=streamUrl;',
-      '  statusEl.textContent="Playing (native HLS)";',
-      '} else {',
-      '  const s=document.createElement("script");',
-      '  s.src="https://cdn.jsdelivr.net/npm/hls.js@1.5.15";',
-      '  s.onload=function(){',
-      '    if (window.Hls && window.Hls.isSupported()) {',
-      '      const hls=new window.Hls({enableWorker:true});',
-      '      hls.loadSource(streamUrl);',
-      '      hls.attachMedia(video);',
-      '      hls.on(window.Hls.Events.MANIFEST_PARSED,function(){statusEl.textContent="Playing (hls.js)";});',
-      '    } else {',
-      '      fail("HLS not supported in this browser");',
-      '    }',
-      '  };',
-      '  s.onerror=function(){fail("Failed to load hls.js");};',
-      '  document.head.appendChild(s);',
-      '}',
-      '</script>',
-      '</body>',
-      '</html>'
-    ].join('');
-    const blobUrl = URL.createObjectURL(new Blob([html], { type: 'text/html' }));
-    const win = window.open(blobUrl, '_blank', 'noopener,noreferrer');
-    if (!win) {
-      window.location.href = streamUrl;
-      return;
-    }
-    setTimeout(() => URL.revokeObjectURL(blobUrl), 60000);
+    const overlay = document.createElement('div');
+    overlay.className = 'vix-player-overlay';
+    Object.assign(overlay.style, {
+      position: 'fixed',
+      top: '0',
+      left: '0',
+      width: '100%',
+      height: '100%',
+      background: 'rgba(0,0,0,0.88)',
+      zIndex: '100000',
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'center',
+      padding: '20px'
+    });
+
+    const panel = document.createElement('div');
+    Object.assign(panel.style, {
+      width: 'min(1200px, 96vw)',
+      background: '#0b0b0b',
+      borderRadius: '10px',
+      boxShadow: '0 20px 60px rgba(0,0,0,0.5)',
+      padding: '14px',
+      color: '#fff',
+      display: 'flex',
+      flexDirection: 'column',
+      gap: '10px'
+    });
+
+    const header = document.createElement('div');
+    Object.assign(header.style, { display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '12px' });
+    const titleEl = document.createElement('div');
+    titleEl.textContent = safeTitle;
+    Object.assign(titleEl.style, { fontSize: '14px', opacity: '0.85' });
+    const closeBtn = document.createElement('button');
+    closeBtn.textContent = 'Chiudi';
+    Object.assign(closeBtn.style, {
+      background: '#e50914',
+      color: '#fff',
+      border: 'none',
+      borderRadius: '6px',
+      padding: '6px 10px',
+      cursor: 'pointer',
+      fontSize: '12px'
+    });
+    closeBtn.addEventListener('click', closePlayer);
+    header.appendChild(titleEl);
+    header.appendChild(closeBtn);
+
+    const statusEl = document.createElement('div');
+    statusEl.textContent = 'Inizializzo player...';
+    Object.assign(statusEl.style, { fontSize: '13px', opacity: '0.75' });
+
+    const video = document.createElement('video');
+    video.controls = true;
+    video.autoplay = true;
+    video.playsInline = true;
+    Object.assign(video.style, {
+      width: '100%',
+      maxHeight: '70vh',
+      background: '#000',
+      borderRadius: '8px'
+    });
+
+    panel.appendChild(header);
+    panel.appendChild(statusEl);
+    panel.appendChild(video);
+    overlay.appendChild(panel);
+    overlay.addEventListener('click', (ev) => {
+      if (ev.target === overlay) closePlayer();
+    });
+    const onKey = (ev) => {
+      if (ev.key === 'Escape') closePlayer();
+    };
+    document.addEventListener('keydown', onKey);
+    document.body.appendChild(overlay);
+
+    activePlayer = { overlay, hls: null, onKey };
+
+    ensureHlsReady().then((HlsLib) => {
+      if (!HlsLib || !HlsLib.isSupported() || !GM_XHR) {
+        statusEl.textContent = 'Player HLS non disponibile, apro il flusso diretto.';
+        video.src = streamUrl;
+        return;
+      }
+      statusEl.textContent = 'Carico stream...';
+      const Loader = createGmHlsLoader(referer);
+      const hls = new HlsLib({ loader: Loader, enableWorker: true });
+      activePlayer.hls = hls;
+      hls.attachMedia(video);
+      hls.on(HlsLib.Events.MEDIA_ATTACHED, () => {
+        hls.loadSource(streamUrl);
+      });
+      hls.on(HlsLib.Events.MANIFEST_PARSED, () => {
+        statusEl.textContent = 'In riproduzione';
+        video.play().catch(() => {});
+      });
+      hls.on(HlsLib.Events.ERROR, (_, data) => {
+        if (data && data.fatal) {
+          statusEl.textContent = 'Errore player: ' + (data.type || 'unknown');
+          try { hls.destroy(); } catch {}
+        }
+      });
+    }).catch(() => {
+      statusEl.textContent = 'Errore nel caricamento del player.';
+      video.src = streamUrl;
+    });
   }
 
   async function openDirectOrFallback(url, btn) {
@@ -259,7 +423,7 @@
     try {
       const result = await resolveVixStream(url);
       if (result && result.streamUrl) {
-        openPlayer(result.streamUrl, document.title);
+        openPlayer(result.streamUrl, document.title, result.referer);
       } else {
         window.open(fallbackUrl, '_blank', 'noopener,noreferrer');
       }
