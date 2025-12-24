@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         VixSrc Play HD – Trakt Anchor Observer + Detail Pages
 // @namespace    http://tampermonkey.net/
-// @version      1.41
+// @version      1.42
 // @description  ▶ pallino rosso in basso-destra su film & episodi Trakt (liste SPA + pagine dettaglio)
 // @match        https://trakt.tv/*
 // @require      https://cdn.jsdelivr.net/npm/hls.js@1.5.15
@@ -1029,12 +1029,12 @@
     // — DETTAGLIO FILM
     if (/^\/movies\/[^/]+/.test(path)) {
       const el = document.querySelector('a[href*="themoviedb.org/movie/"]');
-      const poster = document.querySelector('.sidebar.sticky.posters .poster.with-overflow');
-      if (el && poster) {
+      const posters = document.querySelectorAll('.sidebar.sticky.posters .poster.with-overflow, .mobile-poster .poster.with-overflow');
+      if (el && posters.length) {
         const m = el.href.match(/themoviedb\.org\/movie\/(\d+)/);
         if (m)
           tmdbExists('movie', m[1]).then(ok => {
-            if (ok) injectCircle(poster, `https://vixsrc.to/movie/${m[1]}`);
+            if (ok) posters.forEach(p => injectCircle(p, `https://vixsrc.to/movie/${m[1]}`));
           });
       }
     }
@@ -1042,12 +1042,12 @@
     // — DETTAGLIO EPISODIO
     if (/^\/shows\/[^/]+\/seasons\/\d+\/episodes\/\d+/.test(path)) {
       const el = document.querySelector('a[href*="themoviedb.org/tv/"]');
-      const poster = document.querySelector('.sidebar.sticky.posters .poster.with-overflow');
-      if (el && poster) {
+      const posters = document.querySelectorAll('.sidebar.sticky.posters .poster.with-overflow, .mobile-poster .poster.with-overflow');
+      if (el && posters.length) {
         const m = el.href.match(/themoviedb\.org\/tv\/(\d+)\/season\/(\d+)\/episode\/(\d+)/);
         if (m)
           tmdbExists('tv', m[1], m[2], m[3]).then(ok => {
-            if (ok) injectCircle(poster, `https://vixsrc.to/tv/${m[1]}/${m[2]}/${m[3]}`);
+            if (ok) posters.forEach(p => injectCircle(p, `https://vixsrc.to/tv/${m[1]}/${m[2]}/${m[3]}`));
           });
       }
     }
