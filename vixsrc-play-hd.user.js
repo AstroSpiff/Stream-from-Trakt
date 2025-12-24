@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         VixSrc Play HD – Trakt Anchor Observer + Detail Pages
 // @namespace    http://tampermonkey.net/
-// @version      1.22
+// @version      1.23
 // @description  ▶ pallino rosso in basso-destra su film & episodi Trakt (liste SPA + pagine dettaglio)  
 // @match        https://trakt.tv/*  
 // @require      https://cdn.jsdelivr.net/npm/hls.js@1.5.15
@@ -395,6 +395,23 @@
     statusEl.textContent = 'Inizializzo player...';
     Object.assign(statusEl.style, { fontSize: '13px', opacity: '0.75' });
 
+    const qualityRow = document.createElement('div');
+    Object.assign(qualityRow.style, { display: 'flex', alignItems: 'center', gap: '8px', fontSize: '12px', opacity: '0.85' });
+    const qualityLabel = document.createElement('span');
+    qualityLabel.textContent = 'Qualita:';
+    const qualitySelect = document.createElement('select');
+    qualitySelect.disabled = true;
+    Object.assign(qualitySelect.style, {
+      background: '#141414',
+      color: '#fff',
+      border: '1px solid #2a2a2a',
+      borderRadius: '6px',
+      padding: '4px 6px'
+    });
+    qualitySelect.appendChild(new Option('Auto', 'auto'));
+    qualityRow.appendChild(qualityLabel);
+    qualityRow.appendChild(qualitySelect);
+
     const video = document.createElement('video');
     video.controls = true;
     video.autoplay = true;
@@ -408,6 +425,7 @@
 
     panel.appendChild(header);
     panel.appendChild(statusEl);
+    panel.appendChild(qualityRow);
     panel.appendChild(video);
     overlay.appendChild(panel);
     overlay.addEventListener('click', (ev) => {
@@ -442,6 +460,49 @@
       });
       hls.on(HlsLib.Events.MANIFEST_PARSED, () => {
         statusEl.textContent = 'In riproduzione';
+        const levels = (hls.levels || []).slice();
+        const unique = [];
+        const seen = new Set();
+        levels.forEach((lvl, idx) => {
+          const h = lvl.height || 0;
+          if (!h || seen.has(h)) return;
+          seen.add(h);
+          unique.push({ height: h, index: idx });
+        });
+        unique.sort((a, b) => b.height - a.height);
+        qualitySelect.innerHTML = '';
+        qualitySelect.appendChild(new Option('Auto', 'auto'));
+        unique.forEach(lvl => {
+          qualitySelect.appendChild(new Option(`${lvl.height}p`, String(lvl.index)));
+        });
+        qualitySelect.disabled = unique.length === 0;
+
+        const pickDefault = () => {
+          let target = unique.find(lvl => lvl.height === 1080);
+          if (!target && unique.length) target = unique[0];
+          if (target) {
+            qualitySelect.value = String(target.index);
+            hls.autoLevelEnabled = false;
+            hls.currentLevel = target.index;
+            hls.loadLevel = target.index;
+          }
+        };
+        pickDefault();
+        qualitySelect.addEventListener('change', () => {
+          const val = qualitySelect.value;
+          if (val === 'auto') {
+            hls.autoLevelEnabled = true;
+            hls.currentLevel = -1;
+            return;
+          }
+          const idx = parseInt(val, 10);
+          if (!Number.isNaN(idx)) {
+            hls.autoLevelEnabled = false;
+            hls.currentLevel = idx;
+            hls.loadLevel = idx;
+          }
+        });
+
         video.play().catch(() => {});
       });
       hls.on(HlsLib.Events.ERROR, (_, data) => {
